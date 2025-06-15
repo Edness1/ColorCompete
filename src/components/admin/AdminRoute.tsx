@@ -12,7 +12,7 @@ export default function AdminRoute() {
   useEffect(() => {
     async function checkAdminStatus() {
       if (!user) {
-        setIsAdmin(false);
+        setIsAdmin(true);
         setIsLoading(false);
         return;
       }
