@@ -1,0 +1,127 @@
+%PDF-1.4
+1 0 obj
+<</Type/Catalog/Pages 2 0 R>>
+endobj
+2 0 obj
+<</Type/Pages/Kids[3 0 R]/Count 1>>
+endobj
+3 0 obj
+<</Type/Page/Parent 2 0 R/Resources<</Font<</F1 4 0 R/F2 5 0 R>>>>/MediaBox[0 0 612 792]/Contents 6 0 R>>
+endobj
+4 0 obj
+<</Type/Font/Subtype/Type1/BaseFont/Helvetica-Bold>>
+endobj
+5 0 obj
+<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>
+endobj
+6 0 obj
+<</Length 2433>>
+stream
+BT
+/F1 24 Tf
+50 700 Td
+(ColorCompete Stripe Implementation Guide) Tj
+/F2 12 Tf
+0 -40 Td
+(This document provides an overview of the Stripe integration in ColorCompete.) Tj
+0 -20 Td
+(Last updated: June 2024) Tj
+/F1 16 Tf
+-20 -40 Td
+(1. Overview) Tj
+/F2 12 Tf
+20 -20 Td
+(ColorCompete uses Stripe to process payments for subscriptions and one-time purchases.) Tj
+0 -15 Td
+(The integration supports multiple subscription tiers and pay-per-submission options.) Tj
+/F1 16 Tf
+-20 -30 Td
+(2. Subscription Tiers) Tj
+/F2 12 Tf
+20 -20 Td
+(- Color Curious \(Free\): 2 submissions/month) Tj
+0 -15 Td
+(- Color Lite \($5/mo\): 5 submissions/month) Tj
+0 -15 Td
+(- Color Pro \($10/mo\): 20 submissions/month) Tj
+0 -15 Td
+(- Color Champ \($20/mo\): Unlimited submissions) Tj
+/F1 16 Tf
+-20 -30 Td
+(3. Implementation Details) Tj
+/F2 12 Tf
+20 -20 Td
+(3.1 Frontend Components) Tj
+0 -15 Td
+(- Pricing.tsx: Displays subscription options and handles plan selection) Tj
+0 -15 Td
+(- SubscriptionContext.tsx: Manages subscription state throughout the application) Tj
+0 -15 Td
+(- SubmissionForm.tsx: Checks subscription status before allowing submissions) Tj
+0 -30 Td
+(3.2 Backend Integration) Tj
+0 -15 Td
+(- Stripe Customer creation upon user registration) Tj
+0 -15 Td
+(- Webhook handling for subscription events) Tj
+0 -15 Td
+(- Supabase database tables for tracking subscription status) Tj
+/F1 16 Tf
+-20 -30 Td
+(4. Payment Flow) Tj
+/F2 12 Tf
+20 -20 Td
+(1. User selects a subscription plan or pay-per-submission option) Tj
+0 -15 Td
+(2. Stripe Checkout session is created and user is redirected to Stripe) Tj
+0 -15 Td
+(3. After successful payment, user is redirected back to ColorCompete) Tj
+0 -15 Td
+(4. Webhook confirms payment and updates user's subscription status) Tj
+0 -15 Td
+(5. User can immediately access their new submission allowance) Tj
+/F1 16 Tf
+-20 -30 Td
+(5. Security Considerations) Tj
+/F2 12 Tf
+20 -20 Td
+(- All payment processing happens on Stripe's secure servers) Tj
+0 -15 Td
+(- No credit card information is stored on ColorCompete servers) Tj
+0 -15 Td
+(- Webhook signatures are verified to prevent tampering) Tj
+0 -15 Td
+(- Subscription status is verified server-side before allowing submissions) Tj
+/F1 16 Tf
+-20 -30 Td
+(6. Testing) Tj
+/F2 12 Tf
+20 -20 Td
+(For testing purposes, use Stripe's test cards:) Tj
+0 -15 Td
+(- 4242 4242 4242 4242: Successful payment) Tj
+0 -15 Td
+(- 4000 0000 0000 0002: Card declined) Tj
+/F1 16 Tf
+-20 -30 Td
+(7. Support) Tj
+/F2 12 Tf
+20 -20 Td
+(For questions about the Stripe implementation, contact support@colorcompete.com) Tj
+ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f
+0000000009 00000 n
+0000000053 00000 n
+0000000102 00000 n
+0000000220 00000 n
+0000000282 00000 n
+0000000339 00000 n
+trailer
+<</Size 7/Root 1 0 R>>
+startxref
+2824
+%%EOF
