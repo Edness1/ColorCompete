@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { useContestAnalytics } from "./useContestAnalytics";
+import { API_URL } from "@/lib/utils";
 
 interface UseVotingProps {
   onVoteSuccess?: (submissionId: string, hasVoted: boolean) => void;
@@ -23,20 +23,12 @@ export function useVoting({
     if (!user) return false;
 
     try {
-      const { data, error } = await supabase
-        .from("votes")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("submission_id", submissionId)
-        .single();
-
-      if (error && error.code !== "PGRST116") {
-        // PGRST116 is the error code for no rows returned
-        console.error("Error checking vote:", error);
-        return false;
-      }
-
-      return !!data;
+      const response = await fetch(
+        `${API_URL}/api/submissions/${submissionId}/vote?user_id=${user._id}`,
+      );
+      if (!response.ok) return false;
+      const data = await response.json();
+      return !!data.hasVoted;
     } catch (error) {
       console.error("Error checking vote:", error);
       return false;
@@ -62,13 +54,16 @@ export function useVoting({
 
       if (hasVoted) {
         // Remove the vote
-        const { error } = await supabase
-          .from("votes")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("submission_id", submissionId);
+        const response = await fetch(
+          `${API_URL}/api/submissions/${submissionId}/vote`,
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: user._id }),
+          },
+        );
 
-        if (error) throw error;
+        if (!response.ok) throw new Error("Failed to remove vote");
 
         toast({
           title: "Vote Removed",
@@ -79,27 +74,26 @@ export function useVoting({
         return false;
       } else {
         // Add a vote
-        const { error } = await supabase.from("votes").insert({
-          user_id: user.id,
-          submission_id: submissionId,
-        });
+        const response = await fetch(
+          `${API_URL}/api/submissions/${submissionId}/vote`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: user._id }),
+          },
+        );
 
-        if (error) throw error;
+        if (!response.ok) throw new Error("Failed to record vote");
 
         toast({
           title: "Vote Recorded",
           description: "Your vote has been counted!",
         });
 
-        // Get the contest ID for the submission to track the vote
-        const { data: submissionData } = await supabase
-          .from("submissions")
-          .select("contest_id")
-          .eq("id", submissionId)
-          .single();
-
-        if (submissionData?.contest_id) {
-          trackVote(submissionData.contest_id);
+        // Optionally track vote if your API returns contest_id
+        const data = await response.json();
+        if (data?.contest_id) {
+          trackVote(data.contest_id);
         }
 
         onVoteSuccess(submissionId, true);

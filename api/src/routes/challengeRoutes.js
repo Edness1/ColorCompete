@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const challengeController = require('../controllers/challengeController');
 
+// Place this BEFORE any route with :id
+router.get('/active', challengeController.getActiveChallenge);
+
 // Create a new challenge
 router.post('/', challengeController.createChallenge);
 

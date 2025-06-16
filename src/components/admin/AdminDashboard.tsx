@@ -6,6 +6,7 @@ import ContestManagement from "./ContestManagement";
 import ContestList from "./ContestList";
 import SubmissionModeration from "./SubmissionModeration";
 import ContestAnalytics from "./ContestAnalytics";
+import { MainHeader } from "../header";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("contests");
@@ -13,6 +14,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="container mx-auto py-8 bg-background">
+      <MainHeader />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
         <h1 className="text-3xl font-bold mb-4 md:mb-0">Admin Dashboard</h1>
 

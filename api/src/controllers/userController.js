@@ -5,6 +5,10 @@ const User = require('../models/User');
 // Create a new user
 exports.createUser = async (req, res) => {
   try {
+    // Hash the password before saving the user
+    if (req.body.password) {
+      req.body.password = await bcrypt.hash(req.body.password, 10);
+    }
     const user = new User(req.body);
     await user.save();
     res.status(201).json(user);

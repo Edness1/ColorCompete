@@ -52,17 +52,19 @@ export const MainHeader = () => {
             Leaderboard
         </Link>
         <Link
-            to="/profile"
-            className="font-medium text-muted-foreground hover:text-primary transition-colors"
-        >
-            Profile
-        </Link>
-        <Link
             to="/pricing"
             className="font-medium text-muted-foreground hover:text-primary transition-colors"
         >
             Pricing
         </Link>
+        {user?.isAdmin && (
+            <Link
+                to="/admin"
+                className="font-medium text-destructive hover:text-primary transition-colors"
+            >
+                Dashboard
+            </Link>
+        )}
         </nav>
 
         <div className="flex items-center space-x-4">

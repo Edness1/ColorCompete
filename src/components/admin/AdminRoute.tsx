@@ -1,46 +1,12 @@
-import React, { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
 import { Loader2 } from "lucide-react";
 
 export default function AdminRoute() {
   const { user } = useAuth();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function checkAdminStatus() {
-      if (!user) {
-        setIsAdmin(true);
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from("admin_users")
-          .select("user_id")
-          .eq("user_id", user.id)
-          .single();
-
-        if (error && error.code !== "PGRST116") {
-          console.error("Error checking admin status:", error);
-        }
-
-        setIsAdmin(!!data);
-      } catch (error) {
-        console.error("Error checking admin status:", error);
-        setIsAdmin(false);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    checkAdminStatus();
-  }, [user]);
-
-  if (isLoading) {
+  // If user is not loaded yet, show loader
+  if (user === undefined) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -48,5 +14,11 @@ export default function AdminRoute() {
     );
   }
 
-  return isAdmin ? <Outlet /> : <Navigate to="/" replace />;
+  // If user is logged in and isAdmin, allow access
+  if (user && user.isAdmin) {
+    return <Outlet />;
+  }
+
+  // If not admin or not logged in, redirect to home
+  //return <Navigate to="/" replace />;
 }

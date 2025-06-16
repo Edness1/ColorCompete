@@ -30,14 +30,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import axios from "axios"; // Add this import
+import { API_URL } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 interface Contest {
   id: string;
   title: string;
   description: string;
   image_url: string;
-  start_date: string;
-  end_date: string;
+  startDate: string; // updated
+  endDate: string;   // updated
   contest_type: "traditional" | "digital";
   status: "draft" | "scheduled" | "active" | "completed";
   created_at: string;
@@ -53,6 +57,10 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editDatesContest, setEditDatesContest] = useState<Contest | null>(null);
+  const [editStartDate, setEditStartDate] = useState<string>("");
+  const [editEndDate, setEditEndDate] = useState<string>("");
+  const [isSavingDates, setIsSavingDates] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -62,13 +70,8 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
   async function fetchContests() {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("contests")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setContests(data || []);
+      const response = await axios.get(API_URL+"/api/challenges");
+      setContests(response.data || []);
     } catch (error) {
       console.error("Error fetching contests:", error);
       toast({
@@ -86,12 +89,7 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
 
     setIsDeleting(true);
     try {
-      const { error } = await supabase
-        .from("contests")
-        .delete()
-        .eq("id", deleteId);
-
-      if (error) throw error;
+      await axios.delete(API_URL+`/api/challenges/${deleteId}`);
 
       toast({
         title: "Contest deleted",
@@ -125,6 +123,37 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
         return <Badge variant="destructive">Completed</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
+    }
+  }
+
+  function openEditDatesDialog(contest: Contest) {
+    setEditDatesContest(contest);
+    setEditStartDate(contest.startDate ? contest.startDate.slice(0, 10) : "");
+    setEditEndDate(contest.endDate ? contest.endDate.slice(0, 10) : "");
+  }
+
+  async function handleSaveDates() {
+    if (!editDatesContest) return;
+    setIsSavingDates(true);
+    try {
+      await axios.patch(API_URL + `/api/challenges/${editDatesContest.id}`, {
+        startDate: editStartDate,
+        endDate: editEndDate,
+      });
+      toast({
+        title: "Dates updated",
+        description: "Contest dates have been updated.",
+      });
+      fetchContests();
+      setEditDatesContest(null);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update dates.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingDates(false);
     }
   }
 
@@ -171,10 +200,14 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
                         : "Digital"}
                     </TableCell>
                     <TableCell>
-                      {format(new Date(contest.start_date), "MMM d, yyyy")}
+                      {contest.startDate && !isNaN(new Date(contest.startDate).getTime())
+                        ? format(new Date(contest.startDate), "MMM d, yyyy")
+                        : "N/A"}
                     </TableCell>
                     <TableCell>
-                      {format(new Date(contest.end_date), "MMM d, yyyy")}
+                      {contest.endDate && !isNaN(new Date(contest.endDate).getTime())
+                        ? format(new Date(contest.endDate), "MMM d, yyyy")
+                        : "N/A"}
                     </TableCell>
                     <TableCell>{getStatusBadge(contest.status)}</TableCell>
                     <TableCell className="text-right">
@@ -199,6 +232,15 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
                           onClick={() => setDeleteId(contest.id)}
                         >
                           <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditDatesDialog(contest)}
+                          title="Edit Dates"
+                        >
+                          <span className="sr-only">Edit Dates</span>
+                          📅
                         </Button>
                       </div>
                     </TableCell>
@@ -237,6 +279,42 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Edit Dates Dialog */}
+        <Dialog open={!!editDatesContest} onOpenChange={() => setEditDatesContest(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Contest Dates</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4">
+              <label>
+                Start Date
+                <Input
+                  type="date"
+                  value={editStartDate}
+                  onChange={e => setEditStartDate(e.target.value)}
+                />
+              </label>
+              <label>
+                End Date
+                <Input
+                  type="date"
+                  value={editEndDate}
+                  onChange={e => setEditEndDate(e.target.value)}
+                />
+              </label>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDatesContest(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveDates} disabled={isSavingDates}>
+                {isSavingDates ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { MainHeader } from "./header";
 
 interface LeaderboardEntry {
   rank: number;
@@ -119,6 +120,7 @@ const Leaderboard = ({
 
   return (
     <div className="container mx-auto py-8 bg-background">
+      <MainHeader />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
         <h1 className="text-3xl font-bold mb-4 md:mb-0">Leaderboard</h1>
 

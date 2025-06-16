@@ -49,6 +49,7 @@ import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useUserStats } from "@/hooks/useUserStats";
 import { supabase } from "@/lib/supabase";
 import { Link } from "react-router-dom";
+import { MainHeader } from "./header";
 
 interface Submission {
   id: string;
@@ -161,6 +162,25 @@ const UserProfile = ({
   const [profile, setProfile] = useState<any>(null);
   const [userSubmissions, setUserSubmissions] = useState(initialSubmissions);
   const [userAchievements, setUserAchievements] = useState(initialAchievements);
+  const [apiProfile, setApiProfile] = useState<any>(null);
+
+  // Fetch user profile data from your API (not Supabase)
+  useEffect(() => {
+    const fetchApiProfile = async () => {
+      if (!user?._id) return;
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || "";
+        const res = await fetch(`${API_URL}/api/users/${user._id}`);
+        if (!res.ok) throw new Error("Failed to fetch user profile");
+        const data = await res.json();
+        setApiProfile(data);
+      } catch (error) {
+        console.error("Error fetching user profile from API:", error);
+      }
+    };
+
+    fetchApiProfile();
+  }, [user]);
 
   // Fetch user profile data from Supabase
   useEffect(() => {
@@ -171,7 +191,7 @@ const UserProfile = ({
           const { data, error } = await supabase
             .from("profiles")
             .select("*")
-            .eq("id", user.id)
+            .eq("_id", user._id)
             .single();
 
           if (error) throw error;
@@ -216,15 +236,27 @@ const UserProfile = ({
     }
   }, [user]);
 
-  const username = profile?.username || initialUsername;
-  const avatarUrl = profile?.avatar_url || initialAvatarUrl;
-  const joinDate = profile
+  // Use API profile if available, otherwise fallback to props/defaults
+  const username = apiProfile?.username || profile?.username || initialUsername;
+  const firstName = apiProfile?.firstName || profile?.firstName || "John";
+  const lastName = apiProfile?.lastName || profile?.lastName || "Doe";
+  const email = apiProfile?.email || user?.email || "user@example.com";
+  const avatarUrl =
+    apiProfile?.avatarUrl ||
+    profile?.avatar_url ||
+    initialAvatarUrl;
+  const joinDate = apiProfile?.createdAt
+    ? new Date(apiProfile.createdAt).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+      })
+    : profile
     ? new Date(profile.created_at).toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
       })
     : initialJoinDate;
-  const bio = profile?.bio || initialBio;
+  const bio = apiProfile?.bio || profile?.bio || initialBio;
   const submissions = userSubmissions;
   const achievements = userAchievements;
 
@@ -238,6 +270,7 @@ const UserProfile = ({
 
   return (
     <div className="w-full max-w-5xl mx-auto p-4 bg-background">
+      <MainHeader />
       <Card className="mb-8">
         <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">
@@ -477,16 +510,16 @@ const UserProfile = ({
                   <Input
                     id="email"
                     type="email"
-                    defaultValue={user?.email || "user@example.com"}
+                    defaultValue={email}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" defaultValue="John" />
+                  <Input id="firstName" defaultValue={firstName} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" defaultValue="Doe" />
+                  <Input id="lastName" defaultValue={lastName} />
                 </div>
               </div>
               <div className="space-y-2">

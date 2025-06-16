@@ -19,7 +19,8 @@ const UserSchema = new mongoose.Schema({
   },
   badge: { type: mongoose.Schema.Types.ObjectId, ref: 'Badge' },
   resetPasswordToken: { type: String },
-  resetPasswordExpires: { type: Date }
+  resetPasswordExpires: { type: Date },
+  isAdmin: { type: Boolean, default: false }
 });
 
 module.exports = mongoose.model('User', UserSchema);

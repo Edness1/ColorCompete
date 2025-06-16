@@ -31,14 +31,17 @@ import {
 } from "@/components/ui/select";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { API_URL, cn } from "@/lib/utils";
+import axios from "axios"; // Add this import
 
 const formSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
   description: z.string().min(10, "Description must be at least 10 characters"),
-  imageUrl: z.string().url("Please enter a valid URL"),
+  lineArt: z.string().url("Please enter a valid URL"), // replaced imageUrl
   startDate: z.date(),
   endDate: z.date(),
+  startTime: z.string().min(1, "Start time is required"), // added
+  endTime: z.string().min(1, "End time is required"),     // added
   contestType: z.enum(["traditional", "digital"]),
   status: z.enum(["draft", "scheduled", "active", "completed"]),
 });
@@ -58,9 +61,11 @@ export default function ContestManagement({
     defaultValues: {
       title: "",
       description: "",
-      imageUrl: "",
+      lineArt: "",
       startDate: new Date(),
-      endDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Default to 24 hours from now
+      endDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      startTime: "09:00",
+      endTime: "17:00",
       contestType: "traditional",
       status: "draft",
     },
@@ -69,18 +74,18 @@ export default function ContestManagement({
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
-      // Insert the contest into the database
-      const { error } = await supabase.from("contests").insert({
+      // Send POST request to backend API
+      await axios.post(API_URL + "/api/challenges", {
         title: values.title,
         description: values.description,
-        image_url: values.imageUrl,
-        start_date: values.startDate.toISOString(),
-        end_date: values.endDate.toISOString(),
-        contest_type: values.contestType,
+        lineArt: values.lineArt,
+        startDate: values.startDate,
+        endDate: values.endDate,
+        startTime: values.startTime,
+        endTime: values.endTime,
+        contestType: values.contestType,
         status: values.status,
       });
-
-      if (error) throw error;
 
       toast({
         title: "Contest created",
@@ -150,7 +155,7 @@ export default function ContestManagement({
 
           <FormField
             control={form.control}
-            name="imageUrl"
+            name="lineArt"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Line Art Image URL</FormLabel>
@@ -305,6 +310,35 @@ export default function ContestManagement({
                       <SelectItem value="completed">Completed</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <FormField
+              control={form.control}
+              name="startTime"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Start Time</FormLabel>
+                  <FormControl>
+                    <Input type="time" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="endTime"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>End Time</FormLabel>
+                  <FormControl>
+                    <Input type="time" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

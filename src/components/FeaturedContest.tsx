@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,75 +12,146 @@ import DownloadConfirmation from "./DownloadConfirmation";
 import SubmissionButton from "./SubmissionButton";
 import { toast } from "@/components/ui/use-toast";
 import { useContestAnalytics } from "@/hooks/useContestAnalytics";
+import { API_URL } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
-interface FeaturedContestProps {
-  artworkTitle?: string;
-  artworkImage?: string;
-  artworkBwImage?: string;
-  remainingTime?: string;
-  downloadCount?: number;
-  submissionCount?: number;
-  onDownload?: () => void;
-  onSubmit?: () => void;
-  contestType?: "traditional" | "digital";
-  description?: string;
-  contestId?: string;
+interface Challenge {
+  _id: string;
+  title: string;
+  description: string;
+  lineArt: string;
+  startDate: string;
+  endDate: string;
+  contestType: "traditional" | "digital";
+  status: "draft" | "scheduled" | "active" | "completed";
+  download?: any[];
   artStyle?: "anime" | "matisse" | "standard";
+  createdAt?: string;
+  submissions?: object[];
 }
 
-const FeaturedContest = ({
-  artworkTitle = "Today's Line Art Challenge",
-  artworkImage = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80",
-  artworkBwImage,
-  remainingTime = "23:45:12",
-  downloadCount = 128,
-  submissionCount = 42,
-  onDownload = () => console.log("Download clicked"),
-  onSubmit = () => console.log("Submit clicked"),
-  contestType = "traditional",
-  description = "Color today's line art with your favorite tools and submit your masterpiece!",
-  contestId,
-  artStyle = "standard",
-}: FeaturedContestProps) => {
-  // We now primarily use the black and white image for the daily contest
-  const displayImage = artworkBwImage || artworkImage;
+const FeaturedContest = () => {
+  const [latestContest, setLatestContest] = useState<Challenge | null>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [remainingTime, setRemainingTime] = useState<string>("--:--:--");
+  const [submissionCount, setSubmissionCount] = useState<number>(0);
   const { trackDownload } = useContestAnalytics();
+  const { user } = useAuth(); // user object from your auth context
+  const userId = user?._id;    // or user?._id or user?.userId depending on your user object
+
+  // Fetch latest contest
+  useEffect(() => {
+    const fetchLatestContest = async () => {
+      try {
+        const res = await fetch(API_URL + "/api/challenges");
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          // Sort by creation date descending and pick the latest
+          const latest = data[data.length - 1] as Challenge;
+          setLatestContest(latest);
+        }
+      } catch (err) {
+        console.error("Failed to fetch latest contest:", err);
+      }
+    };
+    fetchLatestContest();
+  }, []);
+
+  // 24-hour countdown from startDate
+  useEffect(() => {
+    if (!latestContest?.startDate) return;
+
+    const getRemaining = () => {
+      const start = new Date(latestContest.startDate);
+      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const diff = end.getTime() - now.getTime();
+
+      if (diff <= 0) return "00:00:00";
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+      return (
+        hours.toString().padStart(2, "0") +
+        ":" +
+        mins.toString().padStart(2, "0") +
+        ":" +
+        secs.toString().padStart(2, "0")
+      );
+    };
+
+    setRemainingTime(getRemaining());
+    const timer = setInterval(() => {
+      setRemainingTime(getRemaining());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [latestContest?.startDate]);
+
+  // Fetch submission count for this contest
+  useEffect(() => {
+    const fetchSubmissionCount = async () => {
+      if (!latestContest?._id) return;
+      try {
+        const res = await fetch(`${API_URL}/api/submissions?challenge_id=${latestContest._id}`);
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setSubmissionCount(data.length);
+        }
+      } catch (err) {
+        console.error("Failed to fetch submissions:", err);
+      }
+    };
+    fetchSubmissionCount();
+  }, [latestContest?._id]);
 
   // Function to handle actual download
   const handleDownload = async () => {
+    console.log(userId, "User ID for download tracking");
+    console.log(latestContest?._id, "Latest Contest ID for download tracking");
     try {
-      // Fetch the image for download
-      const response = await fetch(displayImage);
-      const blob = await response.blob();
+      if (latestContest?._id && userId) {
+        try {
+          const updateduser = await fetch(API_URL + `/api/challenges/${latestContest._id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              download:[...latestContest.download, {userId:userId,
+              timestamp: new Date().toISOString()}],
+            }),
+          });
+          console.log("Download logged to backend:", updateduser);
+        } catch (err) {
+          console.error("Failed to log download to backend:", err);
+        }
+      }
 
-      // Create a download link
+      // Download the image
+      const response = await fetch(latestContest?.lineArt || "");
+      const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-
-      // Generate a filename from the artwork title
-      const filename = `${artworkTitle.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-line-art.jpg`;
+      const filename = `${(latestContest?.title || "line-art")
+        .replace(/[^a-z0-9]/gi, "-")
+        .toLowerCase()}-line-art.jpg`;
       link.setAttribute("download", filename);
-
-      // Append to the document, click it, and clean up
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
-      // Show success message
-      toast({
-        title: "Download Complete",
-        description: `${artworkTitle} has been downloaded to your device.`,
-      });
-
-      // Clean up the object URL
       window.URL.revokeObjectURL(url);
 
-      // Track download for analytics
-      if (contestId) {
-        trackDownload(contestId);
+      toast({
+        title: "Download Complete",
+        description: `${latestContest?.title} has been downloaded to your device.`,
+      });
+
+      if (latestContest?._id) {
+        trackDownload(latestContest._id);
       }
     } catch (error) {
       console.error("Download failed:", error);
@@ -94,6 +164,26 @@ const FeaturedContest = ({
     }
   };
 
+  if (!latestContest) {
+    return (
+      <div className="w-full max-w-5xl mx-auto p-6">
+        <div className="h-[500px] w-full rounded-xl bg-muted animate-pulse" />
+      </div>
+    );
+  }
+
+  const {
+    title,
+    lineArt,
+    description,
+    contestType,
+    artStyle,
+    download = [],
+    submissions = [],
+  } = latestContest;
+
+  const displayImage = lineArt;
+
   return (
     <div className="w-full max-w-5xl mx-auto bg-background p-6 rounded-xl">
       <div className="flex flex-col md:flex-row gap-8">
@@ -104,7 +194,7 @@ const FeaturedContest = ({
               <div className="flex justify-between items-center">
                 <div>
                   <CardTitle className="text-2xl font-bold">
-                    {artworkTitle}
+                    {title}
                   </CardTitle>
                   <div className="mt-1">
                     <Badge variant="outline" className="text-xs">
@@ -116,7 +206,8 @@ const FeaturedContest = ({
                 </div>
                 <Badge variant="secondary" className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  <span>{remainingTime} remaining</span>
+                  <span>Remaining</span>
+                  <span className="ml-2 font-mono">{remainingTime}</span>
                 </Badge>
               </div>
             </CardHeader>
@@ -147,7 +238,7 @@ const FeaturedContest = ({
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity duration-300">
                       <Button
                         onClick={() => {
-                          onDownload();
+                          handleDownload();
                           setShowDownloadModal(true);
                         }}
                         size="sm"
@@ -163,10 +254,12 @@ const FeaturedContest = ({
             </CardContent>
             <CardFooter className="flex justify-between pt-4">
               <div className="text-sm text-muted-foreground">
-                <span className="font-medium">{downloadCount}</span> downloads
+                <span className="font-medium">{download.length}</span> downloads
               </div>
               <div className="text-sm text-muted-foreground">
-                <span className="font-medium">{submissionCount}</span>{" "}
+                <span className="font-medium">
+                  {submissionCount}
+                </span>{" "}
                 submissions
               </div>
             </CardFooter>
@@ -251,7 +344,7 @@ const FeaturedContest = ({
           <div className="flex flex-col gap-4">
             <Button
               onClick={() => {
-                onDownload();
+                handleDownload();
                 setShowDownloadModal(true);
               }}
               size="lg"
@@ -267,6 +360,7 @@ const FeaturedContest = ({
               contestType={contestType}
               variant="outline"
               className="w-full"
+              contestId={latestContest._id}
             />
           </div>
         </div>
@@ -275,14 +369,33 @@ const FeaturedContest = ({
       {/* Download Confirmation Modal */}
       {showDownloadModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="max-w-md w-full">
-            <DownloadConfirmation
-              artworkTitle={artworkTitle}
-              artworkImage={artworkImage}
-              artworkBwImage={displayImage}
-              artStyle={artStyle}
-              onClose={() => setShowDownloadModal(false)}
-            />
+          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
+            <h3 className="text-lg font-semibold mb-4">
+              Download Confirmation
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Your download should start automatically. If not, click the button
+              below.
+            </p>
+            <div className="flex justify-center">
+              <Button
+                onClick={handleDownload}
+                className="gap-2"
+                size="sm"
+              >
+                <Download className="h-4 w-4" />
+                Download Again
+              </Button>
+            </div>
+            <div className="mt-4 text-center">
+              <Button
+                onClick={() => setShowDownloadModal(false)}
+                variant="outline"
+                className="w-full"
+              >
+                Close
+              </Button>
+            </div>
           </div>
         </div>
       )}

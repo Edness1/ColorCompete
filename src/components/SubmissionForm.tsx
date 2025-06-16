@@ -1,5 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
-import { useDropzone } from "react-dropzone";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Upload,
@@ -42,9 +41,16 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useNavigate, useLocation } from "react-router-dom";
+import { API_URL } from "@/lib/utils";
 
 interface SubmissionFormProps {
-  onSubmit?: (file: File, ageGroup: string, contestType: string) => void;
+  onSubmit?: (args: {
+    imageUrl: string;
+    ageGroup: string;
+    fileName?: string;
+    fileSize?: number;
+    fileType?: string;
+  }) => Promise<void>;
   isOpen?: boolean;
   onClose?: () => void;
   contestId?: string;
@@ -71,7 +77,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
     isLoading: isLoadingSubscription,
   } = useSubscription();
 
-  const [file, setFile] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState<string>("");
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -114,122 +120,68 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
     initialContestType || "traditional",
   );
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    setError(null);
-
-    if (acceptedFiles.length === 0) {
-      return;
+  useEffect(() => {
+    if (imageUrl) {
+      setPreview(imageUrl);
+    } else {
+      setPreview(null);
     }
-
-    const selectedFile = acceptedFiles[0];
-
-    // Check file type
-    if (!["image/jpeg", "image/png", "image/gif"].includes(selectedFile.type)) {
-      setError("Please upload a valid image file (JPEG, PNG, or GIF)");
-      return;
-    }
-
-    // Check file size (max 5MB)
-    if (selectedFile.size > 5 * 1024 * 1024) {
-      setError("File size must be less than 5MB");
-      return;
-    }
-
-    setFile(selectedFile);
-
-    // Create preview
-    const objectUrl = URL.createObjectURL(selectedFile);
-    setPreview(objectUrl);
-
-    return () => URL.revokeObjectURL(objectUrl);
-  }, []);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      "image/jpeg": [],
-      "image/png": [],
-      "image/gif": [],
-    },
-    maxFiles: 1,
-  });
+  }, [imageUrl]);
 
   const handleSubmit = () => {
-    if (!file) {
-      setError("Please select a file to upload");
+    if (!imageUrl) {
+      setError("Please enter an image URL");
       return;
     }
-
     if (!user) {
       setError("Please sign in to submit artwork");
       return;
     }
-
-    // Check if user needs to pay for this submission
     const submissionFee = getSubmissionFee();
-
     if (submissionFee !== null) {
-      // User has used up their submissions, show payment prompt
       setShowPaymentPrompt(true);
     } else {
-      // User has available submissions, show confirmation
       setShowConfirmation(true);
     }
   };
 
   const confirmSubmission = async () => {
-    if (!file || !user) return;
-
+    if (!imageUrl || !user) return;
     setIsSubmitting(true);
-
     try {
-      // Deduct a submission credit if not in payment flow
-      if (!showPaymentPrompt) {
-        const deducted = await deductSubmission();
-        if (!deducted) {
-          throw new Error("Failed to deduct submission credit");
-        }
-      }
-      // If in payment flow, payment would be processed here
-      // For now, we're just simulating a successful payment
-      // Generate a unique filename to prevent collisions
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-      const filePath = `submissions/${contestType}/${ageGroup}/${fileName}`;
-
-      // Upload the file to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from("artwork")
-        .upload(filePath, file);
-
-      if (uploadError) {
-        throw new Error(uploadError.message);
-      }
-
-      // Get the public URL for the uploaded file
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("artwork").getPublicUrl(filePath);
-
-      // Save submission metadata to the database
-      const { error: dbError } = await supabase.from("submissions").insert({
-        file_path: filePath,
-        public_url: publicUrl,
+      const submissionPayload = {
+        user_id: user._id,
+        file_path: imageUrl,
+        public_url: imageUrl,
         age_group: ageGroup,
         contest_type: contestType,
-        file_name: file.name,
-        file_size: file.size,
-        file_type: file.type,
-        status: "pending", // Initial status before moderation
-        contest_id: contestId, // Link to the contest if provided
+        status: "submitted",
+        votes: [],
+        created_at: new Date().toISOString(),
+        challenge_id: contestId,
+        profiles: {
+          username: user.username,
+          avatar_url: user.avatar_url,
+        },
+      };
+
+      const res = await fetch(API_URL + "/api/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(submissionPayload),
       });
 
-      if (dbError) {
-        throw new Error(dbError.message);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to submit artwork");
       }
 
-      // Call the onSubmit callback with the file and metadata
-      onSubmit(file, ageGroup, contestType);
+      if (onSubmit) {
+        await onSubmit({
+          imageUrl,
+          ageGroup,
+        });
+      }
 
       toast({
         title: "Submission Successful",
@@ -250,14 +202,14 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       toast({
         title: "Submission Failed",
         description:
-          "There was a problem uploading your artwork. Please try again.",
+          "There was a problem submitting your artwork. Please try again.",
         variant: "destructive",
       });
     }
   };
 
   const resetForm = () => {
-    setFile(null);
+    setImageUrl("");
     setPreview(null);
     setError(null);
     setShowConfirmation(false);
@@ -326,35 +278,20 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
           )}
 
           <Card className="border-2 border-dashed border-muted-foreground/25 bg-background">
-            <CardContent className="p-0">
-              {!preview ? (
-                <div
-                  {...getRootProps()}
-                  className="flex flex-col items-center justify-center h-[300px] cursor-pointer p-6 text-center"
-                >
-                  <input {...getInputProps()} />
-                  <motion.div
-                    initial={{ scale: 1 }}
-                    animate={{ scale: isDragActive ? 1.05 : 1 }}
-                    className="flex flex-col items-center gap-4"
-                  >
-                    <div className="p-4 rounded-full bg-primary/10">
-                      <Upload className="h-10 w-10 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-medium">
-                        {isDragActive
-                          ? "Drop your artwork here"
-                          : "Drag & drop your artwork here"}
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        or click to browse files (JPEG, PNG, GIF up to 5MB)
-                      </p>
-                    </div>
-                  </motion.div>
-                </div>
-              ) : (
-                <div className="relative">
+            <CardContent className="p-4">
+              <Label htmlFor="image-url" className="text-sm font-medium mb-2 block">
+                Image URL
+              </Label>
+              <input
+                id="image-url"
+                type="url"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://example.com/your-artwork.jpg"
+                className="w-full border rounded px-3 py-2 text-base"
+              />
+              {preview && (
+                <div className="mt-4 relative">
                   <img
                     src={preview}
                     alt="Preview"
@@ -364,9 +301,8 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
                     variant="destructive"
                     size="icon"
                     className="absolute top-2 right-2 rounded-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFile(null);
+                    onClick={() => {
+                      setImageUrl("");
                       setPreview(null);
                     }}
                   >
@@ -375,19 +311,6 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
                 </div>
               )}
             </CardContent>
-            {file && (
-              <CardFooter className="flex justify-between p-4 border-t">
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground truncate max-w-[300px]">
-                    {file.name}
-                  </span>
-                </div>
-                <span className="text-sm text-muted-foreground">
-                  {(file.size / (1024 * 1024)).toFixed(2)} MB
-                </span>
-              </CardFooter>
-            )}
           </Card>
 
           <div className="grid gap-4">
@@ -450,7 +373,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!file || isSubmitting}
+            disabled={!imageUrl || isSubmitting}
             className="sm:w-auto w-full"
           >
             {isSubmitting ? "Submitting..." : "Submit Artwork"}

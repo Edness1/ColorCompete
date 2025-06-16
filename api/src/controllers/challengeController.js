@@ -59,3 +59,20 @@ exports.deleteChallenge = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Get the currently active contest (challenge) by date and status
+exports.getActiveChallenge = async (req, res) => {
+  try {
+    const now = req.query.now ? new Date(req.query.now) : new Date();
+    const challenge = await Challenge.find({
+      status: "active",
+    }).sort({ start_date: -1 }); // latest active if multiple
+
+    if (!challenge) {
+      return res.status(404).json({ message: "No active contest found" });
+    }
+    res.status(200).json(challenge);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

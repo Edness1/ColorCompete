@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Palette,
@@ -21,39 +22,37 @@ import {
 import ActiveContest from "./ActiveContest";
 import { MainHeader } from "./header";
 
-const Home = () => {
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000"; // Adjust if needed
 
-  // Mock data for recent submissions
-  const recentSubmissions = [
-    {
-      id: 1,
-      imageUrl:
-        "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=300&q=80",
-      artistName: "Jane Cooper",
-      votes: 42,
-    },
-    {
-      id: 2,
-      imageUrl:
-        "https://images.unsplash.com/photo-1580927752452-89d86da3fa0a?w=300&q=80",
-      artistName: "Alex Morgan",
-      votes: 38,
-    },
-    {
-      id: 3,
-      imageUrl:
-        "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=300&q=80",
-      artistName: "Sam Wilson",
-      votes: 35,
-    },
-    {
-      id: 4,
-      imageUrl:
-        "https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=300&q=80",
-      artistName: "Taylor Reed",
-      votes: 29,
-    },
-  ];
+const Home = () => {
+  const [recentSubmissions, setRecentSubmissions] = useState<
+    { id: string | number; file_path: string; artistName: string; votes: number }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRecentSubmissions = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/submissions`);
+        if (!res.ok) throw new Error("Failed to fetch recent submissions");
+        const data = await res.json();
+        // Adjust mapping if your backend uses different field names
+        setRecentSubmissions(
+          data.map((item: any) => ({
+            id: item.id,
+            file_path: item.file_path,
+            artistName: item.profiles?.username || "Unknown Artist",
+            votes: item.votes?.length || 0,
+          }))
+        );
+      } catch (err) {
+        setRecentSubmissions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRecentSubmissions();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -260,43 +259,53 @@ const Home = () => {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-            {recentSubmissions.map((submission) => (
-              <Card key={submission.id} className="overflow-hidden">
-                <div className="aspect-square relative">
-                  <img
-                    src={submission.imageUrl}
-                    alt={`Artwork by ${submission.artistName}`}
-                    className="object-cover w-full h-full"
-                  />
-                </div>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{submission.artistName}</p>
-                    <div className="flex items-center">
-                      <span className="text-sm text-muted-foreground mr-1">
-                        {submission.votes}
-                      </span>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-primary"
-                      >
-                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-                      </svg>
-                    </div>
+          {loading ? (
+            <div className="text-center text-muted-foreground py-8">
+              Loading...
+            </div>
+          ) : recentSubmissions.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              No recent submissions yet.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+              {recentSubmissions.map((submission) => (
+                <Card key={submission.id} className="overflow-hidden">
+                  <div className="aspect-square relative">
+                    <img
+                      src={submission.file_path}
+                      alt={`Artwork by ${submission.artistName}`}
+                      className="object-cover w-full h-full"
+                    />
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">{submission.artistName}</p>
+                      <div className="flex items-center">
+                        <span className="text-sm text-muted-foreground mr-1">
+                          {submission.votes}
+                        </span>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-primary"
+                        >
+                          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Call to Action */}

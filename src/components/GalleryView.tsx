@@ -22,6 +22,8 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useVoting } from "@/hooks/useVoting";
 import { useAuth } from "@/contexts/AuthContext";
+import { MainHeader } from "./header";
+import { API_URL } from "@/lib/utils";
 
 interface Submission {
   id: string;
@@ -47,13 +49,10 @@ const GalleryView = ({
   const [filter, setFilter] = useState("newest");
   const [ageFilter, setAgeFilter] = useState("all");
   const [formatFilter, setFormatFilter] = useState("all");
-  const [gallerySubmissions, setGallerySubmissions] = useState<Submission[]>(
-    [],
-  );
+  const [gallerySubmissions, setGallerySubmissions] = useState<Submission[]>([]);
   const [fetchingSubmissions, setFetchingSubmissions] = useState(true);
-  const [copiedSubmissionId, setCopiedSubmissionId] = useState<string | null>(
-    null,
-  );
+  const [copiedSubmissionId, setCopiedSubmissionId] = useState<string | null>(null);
+  const [originalSubmissions, setOriginalSubmissions] = useState<Submission[]>([]); // <-- move here
   const { user } = useAuth();
 
   // Use the voting hook
@@ -81,93 +80,39 @@ const GalleryView = ({
     const fetchSubmissions = async () => {
       setFetchingSubmissions(true);
       try {
-        // First try to fetch approved submissions
-        let { data, error } = await supabase
-          .from("submissions")
-          .select("*, profiles(username, avatar_url)")
-          .eq("status", "approved");
-
-        // If no approved submissions or error, try fetching all submissions
-        if (!data || data.length === 0 || error) {
-          console.log(
-            "No approved submissions found, fetching all submissions...",
-          );
-          const allSubmissionsResult = await supabase
-            .from("submissions")
-            .select("*, profiles(username, avatar_url)");
-
-          data = allSubmissionsResult.data;
-          error = allSubmissionsResult.error;
+        // Fetch from your backend API, which uses the Submission model
+        const response = await fetch(`${API_URL}/api/submissions`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch submissions from API");
         }
+        const data = await response.json();
 
-        if (error) {
-          console.error("Supabase error:", error);
-          // Fall back to default submissions if database fetch fails
-          console.log("Using default submissions as fallback");
-          setOriginalSubmissions(defaultSubmissions);
-          setGallerySubmissions(defaultSubmissions);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          // Transform the data to match our Submission interface
-          const transformedData: Submission[] = await Promise.all(
-            data.map(async (item) => {
-              // Check if the current user has voted for this submission
-              let hasVoted = false;
-              if (user) {
-                try {
-                  const { data: voteData, error: voteError } = await supabase
-                    .from("votes")
-                    .select("id")
-                    .eq("user_id", user.id)
-                    .eq("submission_id", item.id)
-                    .single();
-
-                  if (voteError && voteError.code !== "PGRST116") {
-                    console.warn("Error checking vote status:", voteError);
-                  }
-                  hasVoted = !!voteData;
-                } catch (voteError) {
-                  console.warn("Error checking vote status:", voteError);
-                  hasVoted = false;
-                }
-              }
-
-              return {
-                id: item.id,
-                imageUrl:
-                  item.public_url ||
-                  item.image_url ||
-                  "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80",
-                artistName:
-                  item.profiles?.username || item.artist_name || "Anonymous",
-                voteCount: item.votes || item.vote_count || 0,
-                submissionDate: item.created_at || new Date().toISOString(),
-                hasVoted,
-                ageGroup: item.age_group,
-                contestType: item.contest_type,
-                user_id: item.user_id,
-                public_url: item.public_url || item.image_url,
-              };
-            }),
-          );
+        if (data && Array.isArray(data) && data.length > 0) {
+          // Map fields based on api/src/models/Submission.js
+          const transformedData: Submission[] = data.map((item) => ({
+            id: item._id || item.id,
+            imageUrl:
+              item.file_path ||
+              "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80",
+            artistName: item.profiles.username || item.artist_name || "Anonymous",
+            voteCount: item.voteCount ?? item.votes ?? item.vote_count ?? 0,
+            submissionDate: item.submissionDate || item.createdAt || item.created_at || new Date().toISOString(),
+            hasVoted: false, // Update if your API returns user vote info
+            ageGroup: item.ageGroup || item.age_group,
+            contestType: item.contestType || item.medium || item.contest_type,
+            user_id: item.user_id,
+            public_url: item.public_url,
+          }));
 
           setOriginalSubmissions(transformedData);
           setGallerySubmissions(transformedData);
-          console.log(
-            `Loaded ${transformedData.length} submissions from database`,
-          );
+          console.log(`Loaded ${transformedData.length} submissions from API`);
         } else {
-          // No data from database, use default submissions
-          console.log("No submissions in database, using default submissions");
           setOriginalSubmissions(defaultSubmissions);
           setGallerySubmissions(defaultSubmissions);
         }
       } catch (error) {
         console.error("Error fetching submissions:", error);
-        // Fall back to default submissions on any error
-        console.log("Using default submissions due to error");
         setOriginalSubmissions(defaultSubmissions);
         setGallerySubmissions(defaultSubmissions);
       } finally {
@@ -175,16 +120,14 @@ const GalleryView = ({
       }
     };
 
-    // If we have submissions passed as props, use those instead
     if (submissions.length > 0) {
-      console.log(`Using ${submissions.length} submissions from props`);
       setOriginalSubmissions(submissions);
       setGallerySubmissions(submissions);
       setFetchingSubmissions(false);
     } else {
       fetchSubmissions();
     }
-  }, [submissions, user]);
+  }, [user]);
 
   const handleVote = async (id: string) => {
     await toggleVote(id);
@@ -241,10 +184,6 @@ const GalleryView = ({
     }
   };
 
-  const [originalSubmissions, setOriginalSubmissions] = useState<Submission[]>(
-    [],
-  );
-
   const filterSubmissions = (
     filterType: string,
     age: string = ageFilter,
@@ -300,6 +239,7 @@ const GalleryView = ({
 
   return (
     <div className="container mx-auto py-8 bg-background">
+      <MainHeader />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
         <h1 className="text-3xl font-bold mb-4 md:mb-0">Gallery</h1>
 

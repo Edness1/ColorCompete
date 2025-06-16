@@ -59,3 +59,18 @@ exports.deleteSubmission = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// GET /api/submissions?challenge_id=xxxx
+// Returns all submissions for a given challenge_id
+exports.getSubmissionsByChallenge = async (req, res) => {
+  try {
+    const { challenge_id } = req.query;
+    if (!challenge_id) {
+      return res.status(400).json({ message: 'challenge_id is required' });
+    }
+    const submissions = await Submission.find({ challenge_id });
+    res.json(submissions);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch submissions', error: err.message });
+  }
+};

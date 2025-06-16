@@ -17,4 +17,7 @@ router.put('/:id', submissionController.updateSubmission);
 // Delete a submission by ID
 router.delete('/:id', submissionController.deleteSubmission);
 
+// Get submissions by challenge
+router.get("/submissions", submissionController.getSubmissionsByChallenge);
+
 module.exports = router;

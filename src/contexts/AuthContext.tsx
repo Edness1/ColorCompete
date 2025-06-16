@@ -6,6 +6,7 @@ type User = {
   firstName?: string;
   lastName?: string;
   username?: string;
+  isAdmin?: boolean; // Add this line
   // add other user fields as needed
 };
 

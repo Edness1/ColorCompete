@@ -13,6 +13,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { SubscriptionProvider } from "./contexts/SubscriptionContext";
 import AdminRoute from "./components/admin/AdminRoute";
 import routes from "tempo-routes";
+import RequireAuth from "./components/auth/RequireAuth";
 
 // Lazy load admin components
 const AdminDashboard = lazy(() => import("./components/admin/AdminDashboard"));
@@ -27,7 +28,15 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/gallery" element={<GalleryView />} />
-              <Route path="/profile" element={<UserProfile />} />
+              {/* Protect the profile route */}
+              <Route
+                path="/profile"
+                element={
+                  <RequireAuth>
+                    <UserProfile />
+                  </RequireAuth>
+                }
+              />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/about" element={<About />} />
