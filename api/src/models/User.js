@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
-  profilePicture: { type: String, required: true }, // Path or URL to JPG file
+  profilePicture: { type: String }, // Path or URL to JPG file
   createdDate: { type: Date, default: Date.now },
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },

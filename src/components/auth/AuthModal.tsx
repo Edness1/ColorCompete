@@ -22,12 +22,16 @@ export default function AuthModal({
   const [tab, setTab] = useState<"signin" | "signup">(defaultTab);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState(""); // <-- Add
+  const [lastName, setLastName] = useState("");   // <-- Add
+  const [username, setUsername] = useState("");   // <-- Add
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { signIn, signUp, signInWithOAuth } = useAuth();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log(email, password, tab);
     e.preventDefault();
     setIsSubmitting(true);
 
@@ -40,7 +44,8 @@ export default function AuthModal({
           description: "You have successfully signed in.",
         });
       } else {
-        const { error } = await signUp(email, password);
+        console.log("Attempting to sign up with email:", email);
+        const { error } = await signUp(email, password, firstName, lastName, username); // <-- Update
         if (error) throw error;
         toast({
           title: "Account created!",
@@ -101,7 +106,7 @@ export default function AuthModal({
 
           <TabsContent value="signin">
             <div className="space-y-4 pt-4">
-              {/* OAuth Buttons */}
+              {/* OAuth Buttons 
               <div className="space-y-3">
                 <Button
                   type="button"
@@ -219,7 +224,7 @@ export default function AuthModal({
                   </span>
                 </div>
               </div>
-
+*/}
               {/* Email/Password Form */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
@@ -256,7 +261,7 @@ export default function AuthModal({
 
           <TabsContent value="signup">
             <div className="space-y-4 pt-4">
-              {/* OAuth Buttons */}
+              {/* OAuth Buttons 
               <div className="space-y-3">
                 <Button
                   type="button"
@@ -374,7 +379,7 @@ export default function AuthModal({
                   </span>
                 </div>
               </div>
-
+*/}
               {/* Email/Password Form */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
@@ -396,6 +401,39 @@ export default function AuthModal({
                     placeholder="Create a secure password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-firstname">First Name</Label>
+                  <Input
+                    id="signup-firstname"
+                    type="text"
+                    placeholder="First Name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-lastname">Last Name</Label>
+                  <Input
+                    id="signup-lastname"
+                    type="text"
+                    placeholder="Last Name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-username">Username</Label>
+                  <Input
+                    id="signup-username"
+                    type="text"
+                    placeholder="Username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     required
                   />
                 </div>
