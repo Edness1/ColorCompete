@@ -18,6 +18,17 @@ router.put('/:id', submissionController.updateSubmission);
 router.delete('/:id', submissionController.deleteSubmission);
 
 // Get submissions by challenge
-router.get("/submissions", submissionController.getSubmissionsByChallenge);
+router.get("/by-challenge/search", submissionController.getSubmissionsByChallenge);
+
+// Vote on a submission
+router.get('/submissions/:submissionId/vote', submissionController.checkUserVote);
+router.post('/submissions/:submissionId/vote', submissionController.addVote);
+router.delete('/submissions/:submissionId/vote', submissionController.removeVote);
+
+// Get leaderboards
+router.get('/submissions/current', submissionController.getCurrentLeaderboard);
+router.get('/submissions/weekly', submissionController.getWeeklyLeaderboard);
+router.get('/submissions/monthly', submissionController.getMonthlyLeaderboard);
+router.get('/submissions/all-time', submissionController.getAllTimeLeaderboard);
 
 module.exports = router;

@@ -97,7 +97,7 @@ const FeaturedContest = () => {
     const fetchSubmissionCount = async () => {
       if (!latestContest?._id) return;
       try {
-        const res = await fetch(`${API_URL}/api/submissions?challenge_id=${latestContest._id}`);
+        const res = await fetch(`${API_URL}/api/submissions/by-challenge/search?challenge_id=${latestContest._id}`);
         const data = await res.json();
         if (Array.isArray(data)) {
           setSubmissionCount(data.length);

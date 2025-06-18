@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { MainHeader } from "./header";
+import { API_URL } from "@/lib/utils";
 
 interface LeaderboardEntry {
   rank: number;
@@ -44,14 +45,37 @@ interface LeaderboardProps {
 }
 
 const Leaderboard = ({
-  currentLeaders = defaultCurrentLeaders,
-  weeklyLeaders = defaultWeeklyLeaders,
-  monthlyLeaders = defaultMonthlyLeaders,
-  allTimeLeaders = defaultAllTimeLeaders,
+  // Remove default props, will use API data
 }: LeaderboardProps) => {
   const [activeTab, setActiveTab] = useState("current");
   const [contestFilter, setContestFilter] = useState("all");
   const [ageFilter, setAgeFilter] = useState("all");
+
+  // New state for API data
+  const [currentLeaders, setCurrentLeaders] = useState<LeaderboardEntry[]>([]);
+  const [weeklyLeaders, setWeeklyLeaders] = useState<LeaderboardEntry[]>([]);
+  const [monthlyLeaders, setMonthlyLeaders] = useState<LeaderboardEntry[]>([]);
+  const [allTimeLeaders, setAllTimeLeaders] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    // Example endpoints, adjust as needed to match your API
+    Promise.all([
+      fetch(API_URL+"/api/submissions/submissions/current").then((res) => res.json()),
+      fetch(API_URL+"/api/submissions/submissions/weekly").then((res) => res.json()),
+      fetch(API_URL+"/api/submissions/submissions/monthly").then((res) => res.json()),
+      fetch(API_URL+"/api/submissions/submissions/all-time").then((res) => res.json()),
+    ])
+      .then(([current, weekly, monthly, allTime]) => {
+        console.log(current, weekly, monthly, allTime)
+        setCurrentLeaders(current);
+        setWeeklyLeaders(weekly);
+        setMonthlyLeaders(monthly);
+        setAllTimeLeaders(allTime);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   // Function to filter leaderboard entries based on selected filters
   const filterEntries = (entries: LeaderboardEntry[]) => {
@@ -121,213 +145,219 @@ const Leaderboard = ({
   return (
     <div className="container mx-auto py-8 bg-background">
       <MainHeader />
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
-        <h1 className="text-3xl font-bold mb-4 md:mb-0">Leaderboard</h1>
+      {loading ? (
+        <div className="text-center py-16 text-lg">Loading leaderboard...</div>
+      ) : (
+        <>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+            <h1 className="text-3xl font-bold mb-4 md:mb-0">Leaderboard</h1>
 
-        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="w-full sm:w-auto"
-          >
-            <TabsList>
-              <TabsTrigger value="current">Today's Contest</TabsTrigger>
-              <TabsTrigger value="weekly">This Week</TabsTrigger>
-              <TabsTrigger value="monthly">This Month</TabsTrigger>
-              <TabsTrigger value="all-time">All Time</TabsTrigger>
-            </TabsList>
-          </Tabs>
+            <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="w-full sm:w-auto"
+              >
+                <TabsList>
+                  <TabsTrigger value="current">Today's Contest</TabsTrigger>
+                  <TabsTrigger value="weekly">This Week</TabsTrigger>
+                  <TabsTrigger value="monthly">This Month</TabsTrigger>
+                  <TabsTrigger value="all-time">All Time</TabsTrigger>
+                </TabsList>
+              </Tabs>
 
-          <div className="flex flex-wrap gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Filter className="h-4 w-4" />
-                  {contestFilter === "all"
-                    ? "All Formats"
-                    : contestFilter === "traditional"
-                      ? "Traditional"
-                      : "Digital"}
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => setContestFilter("all")}>
-                  All Formats
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setContestFilter("traditional")}
-                >
-                  Traditional
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setContestFilter("digital")}>
-                  Digital
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              <div className="flex flex-wrap gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="flex items-center gap-2">
+                      <Filter className="h-4 w-4" />
+                      {contestFilter === "all"
+                        ? "All Formats"
+                        : contestFilter === "traditional"
+                          ? "Traditional"
+                          : "Digital"}
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => setContestFilter("all")}>
+                      All Formats
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setContestFilter("traditional")}
+                    >
+                      Traditional
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setContestFilter("digital")}>
+                      Digital
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  {ageFilter === "all"
-                    ? "All Ages"
-                    : ageFilter === "child"
-                      ? "Children"
-                      : ageFilter === "teen"
-                        ? "Teens"
-                        : ageFilter === "adult"
-                          ? "Adults"
-                          : "Seniors"}
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => setAgeFilter("all")}>
-                  All Ages
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setAgeFilter("child")}>
-                  Children (under 13)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setAgeFilter("teen")}>
-                  Teens (13-17)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setAgeFilter("adult")}>
-                  Adults (18+)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setAgeFilter("senior")}>
-                  Seniors (65+)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      {ageFilter === "all"
+                        ? "All Ages"
+                        : ageFilter === "child"
+                          ? "Children"
+                          : ageFilter === "teen"
+                            ? "Teens"
+                            : ageFilter === "adult"
+                              ? "Adults"
+                              : "Seniors"}
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => setAgeFilter("all")}>
+                      All Ages
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setAgeFilter("child")}>
+                      Children (under 13)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setAgeFilter("teen")}>
+                      Teens (13-17)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setAgeFilter("adult")}>
+                      Adults (18+)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setAgeFilter("senior")}>
+                      Seniors (65+)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Top 3 Winners Highlight */}
-      {activeTab === "current" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {activeLeaderboard.slice(0, 3).map((entry, index) => (
-            <WinnerCard key={entry.userId} entry={entry} position={index + 1} />
-          ))}
-        </div>
-      )}
+          {/* Top 3 Winners Highlight */}
+          {activeTab === "current" && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {activeLeaderboard.slice(0, 3).map((entry, index) => (
+                <WinnerCard key={entry.userId} entry={entry} position={index + 1} />
+              ))}
+            </div>
+          )}
 
-      {/* Full Leaderboard Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {activeTab === "current"
-              ? "Today's Top Submissions"
-              : activeTab === "weekly"
-                ? "This Week's Leaders"
-                : activeTab === "monthly"
-                  ? "This Month's Champions"
-                  : "All-Time Best Artists"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[80px]">Rank</TableHead>
-                <TableHead>Artist</TableHead>
-                <TableHead>Score</TableHead>
-                {activeTab !== "all-time" && <TableHead>Submission</TableHead>}
-                <TableHead className="text-right">Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {activeLeaderboard.length > 0 ? (
-                activeLeaderboard.map((entry) => (
-                  <TableRow key={entry.userId}>
-                    <TableCell className="font-medium">
-                      <div className="flex justify-center">
-                        {renderRankBadge(entry.rank)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={entry.avatarUrl} />
-                          <AvatarFallback>
-                            {entry.username.substring(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="font-medium">{entry.username}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium min-w-[30px]">
-                          {entry.score}
-                        </span>
-                        <Progress
-                          value={(entry.score / maxScore) * 100}
-                          className="h-2 w-[100px]"
-                        />
-                      </div>
-                    </TableCell>
-                    {activeTab !== "all-time" && (
-                      <TableCell>
-                        {entry.submissionUrl && (
-                          <div className="h-10 w-10 rounded overflow-hidden">
-                            <img
-                              src={entry.submissionUrl}
-                              alt={`Submission by ${entry.username}`}
-                              className="h-full w-full object-cover"
+          {/* Full Leaderboard Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                {activeTab === "current"
+                  ? "Today's Top Submissions"
+                  : activeTab === "weekly"
+                    ? "This Week's Leaders"
+                    : activeTab === "monthly"
+                      ? "This Month's Champions"
+                      : "All-Time Best Artists"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[80px]">Rank</TableHead>
+                    <TableHead>Artist</TableHead>
+                    <TableHead>Score</TableHead>
+                    {activeTab !== "all-time" && <TableHead>Submission</TableHead>}
+                    <TableHead className="text-right">Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {activeLeaderboard.length > 0 ? (
+                    activeLeaderboard.map((entry) => (
+                      <TableRow key={entry.userId}>
+                        <TableCell className="font-medium">
+                          <div className="flex justify-center">
+                            {renderRankBadge(entry.rank)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={entry.avatarUrl} />
+                              <AvatarFallback>
+                                {entry.username.substring(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="font-medium">{entry.username}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium min-w-[30px]">
+                              {entry.score}
+                            </span>
+                            <Progress
+                              value={(entry.score / maxScore) * 100}
+                              className="h-2 w-[100px]"
                             />
                           </div>
+                        </TableCell>
+                        {activeTab !== "all-time" && (
+                          <TableCell>
+                            {entry.submissionUrl && (
+                              <div className="h-10 w-10 rounded overflow-hidden">
+                                <img
+                                  src={entry.submissionUrl}
+                                  alt={`Submission by ${entry.username}`}
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            )}
+                          </TableCell>
                         )}
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            {entry.contestType && (
+                              <Badge variant="outline">
+                                {entry.contestType === "traditional"
+                                  ? "Traditional"
+                                  : "Digital"}
+                              </Badge>
+                            )}
+                            {entry.ageGroup && (
+                              <Badge variant="secondary">
+                                {entry.ageGroup === "child"
+                                  ? "Child"
+                                  : entry.ageGroup === "teen"
+                                    ? "Teen"
+                                    : entry.ageGroup === "adult"
+                                      ? "Adult"
+                                      : "Senior"}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="text-center py-8 text-muted-foreground"
+                      >
+                        No entries found for the selected filters
                       </TableCell>
-                    )}
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {entry.contestType && (
-                          <Badge variant="outline">
-                            {entry.contestType === "traditional"
-                              ? "Traditional"
-                              : "Digital"}
-                          </Badge>
-                        )}
-                        {entry.ageGroup && (
-                          <Badge variant="secondary">
-                            {entry.ageGroup === "child"
-                              ? "Child"
-                              : entry.ageGroup === "teen"
-                                ? "Teen"
-                                : entry.ageGroup === "adult"
-                                  ? "Adult"
-                                  : "Senior"}
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={5}
-                    className="text-center py-8 text-muted-foreground"
-                  >
-                    No entries found for the selected filters
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-            <TableCaption>
-              {activeTab === "current"
-                ? "Rankings are updated in real-time as votes come in"
-                : activeTab === "weekly"
-                  ? "Weekly rankings are reset every Sunday at midnight"
-                  : activeTab === "monthly"
-                    ? "Monthly rankings are reset on the first day of each month"
-                    : "All-time rankings include all contests since launch"}
-            </TableCaption>
-          </Table>
-        </CardContent>
-      </Card>
+                    </TableRow>
+                  )}
+                </TableBody>
+                <TableCaption>
+                  {activeTab === "current"
+                    ? "Rankings are updated in real-time as votes come in"
+                    : activeTab === "weekly"
+                      ? "Weekly rankings are reset every Sunday at midnight"
+                      : activeTab === "monthly"
+                        ? "Monthly rankings are reset on the first day of each month"
+                        : "All-time rankings include all contests since launch"}
+                </TableCaption>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 };

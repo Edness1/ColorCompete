@@ -24,7 +24,7 @@ export function useVoting({
 
     try {
       const response = await fetch(
-        `${API_URL}/api/submissions/${submissionId}/vote?user_id=${user._id}`,
+        `${API_URL}/api/submissions/submissions/${submissionId}/vote?user_id=${user._id}`,
       );
       if (!response.ok) return false;
       const data = await response.json();
@@ -55,7 +55,7 @@ export function useVoting({
       if (hasVoted) {
         // Remove the vote
         const response = await fetch(
-          `${API_URL}/api/submissions/${submissionId}/vote`,
+          `${API_URL}/api/submissions/submissions/${submissionId}/vote`,
           {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
@@ -75,7 +75,7 @@ export function useVoting({
       } else {
         // Add a vote
         const response = await fetch(
-          `${API_URL}/api/submissions/${submissionId}/vote`,
+          `${API_URL}/api/submissions/submissions/${submissionId}/vote`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
