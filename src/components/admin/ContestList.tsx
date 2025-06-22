@@ -84,12 +84,20 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
     }
   }
 
-  async function handleDelete() {
+  async function handleDelete(id: string) {
+    let deleteId = id;
+    console.log("Deleting contest with ID:", id);
     if (!deleteId) return;
 
     setIsDeleting(true);
     try {
-      await axios.delete(API_URL+`/api/challenges/${deleteId}`);
+      const res = await fetch(API_URL + `/api/challenges/${deleteId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to delete contest");
+      }
 
       toast({
         title: "Contest deleted",
@@ -190,7 +198,7 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
               </TableHeader>
               <TableBody>
                 {contests.map((contest) => (
-                  <TableRow key={contest.id}>
+                  <TableRow key={contest._id}>
                     <TableCell className="font-medium">
                       {contest.title}
                     </TableCell>
@@ -229,7 +237,7 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setDeleteId(contest.id)}
+                          onClick={() => handleDelete(contest._id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

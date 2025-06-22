@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/use-toast";
 import {
   Card,
@@ -20,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { API_URL } from "@/lib/utils";
 
 interface Submission {
   id: string;
@@ -56,13 +56,9 @@ export default function SubmissionModeration() {
   async function fetchSubmissions(status: string) {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("submissions")
-        .select("*, profiles(username, avatar_url)")
-        .eq("status", status)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
+      const res = await fetch(`${API_URL}/api/submissions?status=${status}`);
+      if (!res.ok) throw new Error("Failed to fetch submissions");
+      const data = await res.json();
       setSubmissions(data || []);
     } catch (error) {
       console.error("Error fetching submissions:", error);
@@ -79,19 +75,16 @@ export default function SubmissionModeration() {
   async function updateSubmissionStatus(id: string, status: string) {
     setIsProcessing(true);
     try {
-      const { error } = await supabase
-        .from("submissions")
-        .update({ status })
-        .eq("id", id);
-
-      if (error) throw error;
-
+      const res = await fetch(`${API_URL}/api/submissions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error("Failed to update submission");
       toast({
         title: "Submission updated",
         description: `The submission has been ${status === "approved" ? "approved" : "rejected"}.`,
       });
-
-      // Refresh the list
       fetchSubmissions(activeTab);
       setSelectedSubmission(null);
     } catch (error) {
@@ -143,7 +136,7 @@ export default function SubmissionModeration() {
                   <Card key={submission.id} className="overflow-hidden">
                     <div className="relative aspect-square overflow-hidden">
                       <img
-                        src={submission.public_url}
+                        src={submission.file_path}
                         alt={`Submission by ${submission.profiles?.username || "Anonymous"}`}
                         className="object-cover w-full h-full"
                       />
@@ -183,7 +176,7 @@ export default function SubmissionModeration() {
                             variant="outline"
                             className="w-full"
                             onClick={() =>
-                              updateSubmissionStatus(submission.id, "rejected")
+                              updateSubmissionStatus(submission._id, "rejected")
                             }
                             disabled={isProcessing}
                           >
@@ -193,7 +186,7 @@ export default function SubmissionModeration() {
                           <Button
                             className="w-full"
                             onClick={() =>
-                              updateSubmissionStatus(submission.id, "approved")
+                              updateSubmissionStatus(submission._id, "approved")
                             }
                             disabled={isProcessing}
                           >
@@ -234,7 +227,7 @@ export default function SubmissionModeration() {
                   <div>
                     <div className="aspect-square overflow-hidden rounded-md">
                       <img
-                        src={selectedSubmission.public_url}
+                        src={selectedSubmission.file_path}
                         alt={`Submission by ${selectedSubmission.profiles?.username || "Anonymous"}`}
                         className="object-contain w-full h-full"
                       />
@@ -309,7 +302,7 @@ export default function SubmissionModeration() {
                           className="w-full"
                           onClick={() =>
                             updateSubmissionStatus(
-                              selectedSubmission.id,
+                              selectedSubmission._id,
                               "rejected",
                             )
                           }
@@ -326,7 +319,7 @@ export default function SubmissionModeration() {
                           className="w-full"
                           onClick={() =>
                             updateSubmissionStatus(
-                              selectedSubmission.id,
+                              selectedSubmission._id,
                               "approved",
                             )
                           }

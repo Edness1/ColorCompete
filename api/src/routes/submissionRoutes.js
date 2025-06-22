@@ -13,6 +13,7 @@ router.get('/:id', submissionController.getSubmissionById);
 
 // Update a submission by ID
 router.put('/:id', submissionController.updateSubmission);
+router.patch('/:id', submissionController.updateSubmission);
 
 // Delete a submission by ID
 router.delete('/:id', submissionController.deleteSubmission);

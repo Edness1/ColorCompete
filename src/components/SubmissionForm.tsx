@@ -158,7 +158,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
         public_url: imageUrl,
         age_group: ageGroup,
         contest_type: contestType,
-        status: "submitted",
+        status: "pending",
         votes: [],
         created_at: new Date().toISOString(),
         challenge_id: contestId,

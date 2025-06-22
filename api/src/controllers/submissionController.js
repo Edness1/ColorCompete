@@ -14,7 +14,10 @@ exports.createSubmission = async (req, res) => {
 // Get all submissions
 exports.getAllSubmissions = async (req, res) => {
   try {
-    const submissions = await Submission.find();
+    const { status } = req.query;
+    let filter = {};
+    if (status) filter.status = status;
+    const submissions = await Submission.find(filter);
     res.status(200).json(submissions);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -57,6 +60,28 @@ exports.deleteSubmission = async (req, res) => {
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// PATCH /api/submissions/:id
+exports.updateSubmissionStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!["approved", "rejected", "pending"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+    const submission = await Submission.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+    if (!submission) {
+      return res.status(404).json({ message: "Submission not found" });
+    }
+    res.status(200).json(submission);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
 };
 
