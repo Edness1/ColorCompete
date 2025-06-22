@@ -50,10 +50,15 @@ interface ContestManagementProps {
   onSuccess?: () => void;
 }
 
+const CLOUDINARY_UPLOAD_PRESET = "cewqtwou"; // <-- set this
+const CLOUDINARY_CLOUD_NAME = "dwnqwem6e"; // <-- set this
+
 export default function ContestManagement({
   onSuccess,
 }: ContestManagementProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [lineArtPreview, setLineArtPreview] = useState<string | null>(null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -70,6 +75,32 @@ export default function ContestManagement({
       status: "draft",
     },
   });
+
+  const handleLineArtUpload = async (e: React.ChangeEvent<HTMLInputElement>, onChange: (url: string) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      onChange(data.secure_url);
+      setLineArtPreview(data.secure_url);
+    } catch (err) {
+      // Optionally show a toast or error message
+    }
+    setUploading(false);
+  };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
@@ -160,10 +191,38 @@ export default function ContestManagement({
               <FormItem>
                 <FormLabel>Line Art Image URL</FormLabel>
                 <FormControl>
-                  <Input
-                    placeholder="https://example.com/image.jpg"
-                    {...field}
-                  />
+                  <>
+                    
+                    
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="lineart-upload"
+                        style={{ display: "none" }}
+                        disabled={uploading}
+                        onChange={e => handleLineArtUpload(e, field.onChange)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => document.getElementById("lineart-upload")?.click()}
+                        disabled={uploading}
+                      >
+                        {uploading ? "Uploading..." : "Upload from device"}
+                      </Button>
+                    </div>
+                    {lineArtPreview && (
+                      <div className="mt-4">
+                        <img
+                          src={lineArtPreview}
+                          alt="Line Art Preview"
+                          className="w-full max-h-64 object-contain border rounded"
+                        />
+                      </div>
+                    )}
+                  </>
                 </FormControl>
                 <FormDescription>
                   URL to the line art image for traditional contests or

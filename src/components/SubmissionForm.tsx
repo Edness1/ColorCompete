@@ -43,6 +43,9 @@ import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import { API_URL } from "@/lib/utils";
 
+const CLOUDINARY_UPLOAD_PRESET = "cewqtwou"; // <-- set this
+const CLOUDINARY_CLOUD_NAME = "dwnqwem6e"; // <-- set this
+
 interface SubmissionFormProps {
   onSubmit?: (args: {
     imageUrl: string;
@@ -248,6 +251,33 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
     onClose();
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      setImageUrl(data.secure_url);
+      setPreview(data.secure_url);
+    } catch (err) {
+      setError("Failed to upload image. Please try again.");
+    }
+    setIsSubmitting(false);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[800px] bg-background">
@@ -282,14 +312,27 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
               <Label htmlFor="image-url" className="text-sm font-medium mb-2 block">
                 Image URL
               </Label>
-              <input
-                id="image-url"
-                type="url"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://example.com/your-artwork.jpg"
-                className="w-full border rounded px-3 py-2 text-base"
-              />
+              
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  id="file-upload"
+                  style={{ display: "none" }}
+                  disabled={isSubmitting}
+                  onChange={handleImageUpload}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById("file-upload")?.click()}
+                  disabled={isSubmitting}
+                >
+                  <Upload className="h-4 w-4 mr-1" />
+                  {isSubmitting ? "Uploading..." : "Upload from device"}
+                </Button>
+              </div>
               {preview && (
                 <div className="mt-4 relative">
                   <img

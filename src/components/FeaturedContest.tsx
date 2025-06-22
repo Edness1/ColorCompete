@@ -111,8 +111,6 @@ const FeaturedContest = () => {
 
   // Function to handle actual download
   const handleDownload = async () => {
-    console.log(userId, "User ID for download tracking");
-    console.log(latestContest?._id, "Latest Contest ID for download tracking");
     try {
       if (latestContest?._id && userId) {
         try {
