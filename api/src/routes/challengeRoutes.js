@@ -20,4 +20,7 @@ router.put('/:id', challengeController.updateChallenge);
 // Delete a challenge by ID
 router.delete('/:id', challengeController.deleteChallenge);
 
+// Get all contest analytics
+router.get('/analytics/contest-analytics', challengeController.getAllContestAnalytics);
+
 module.exports = router;

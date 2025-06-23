@@ -140,12 +140,11 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       setError("Please sign in to submit artwork");
       return;
     }
-    const submissionFee = getSubmissionFee();
-    if (submissionFee !== null) {
+    if (remainingSubmissions <= 0) {
       setShowPaymentPrompt(true);
-    } else {
-      setShowConfirmation(true);
+      return;
     }
+    setShowConfirmation(true);
   };
 
   const confirmSubmission = async () => {
@@ -158,7 +157,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
         public_url: imageUrl,
         age_group: ageGroup,
         contest_type: contestType,
-        status: "pending",
+        status: "submitted",
         votes: [],
         created_at: new Date().toISOString(),
         challenge_id: contestId,
@@ -177,6 +176,11 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.message || "Failed to submit artwork");
+      }
+
+      // Deduct a submission credit only if user had credits
+      if (remainingSubmissions > 0) {
+        await deductSubmission();
       }
 
       if (onSubmit) {
@@ -416,7 +420,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!imageUrl || isSubmitting}
+            disabled={!imageUrl || isSubmitting || remainingSubmissions <= 0}
             className="sm:w-auto w-full"
           >
             {isSubmitting ? "Submitting..." : "Submit Artwork"}

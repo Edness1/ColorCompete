@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements } from "@stripe/react-stripe-js";
+import { API_URL } from "@/lib/utils";
 
 type SubscriptionTier = "free" | "lite" | "pro" | "champ";
 
@@ -26,7 +28,7 @@ const tierSubmissionLimits = {
   free: 2,
   lite: 5,
   pro: 20,
-  champ: 999, // Effectively unlimited
+  champ: 999,
 };
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(
@@ -38,17 +40,18 @@ export function SubscriptionProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const [tier, setTier] = useState<SubscriptionTier>("free");
   const [remainingSubmissions, setRemainingSubmissions] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Fetch subscription data whenever the user changes
+  // Stripe public key (replace with your actual key)
+  const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "");
+
   useEffect(() => {
     if (user) {
       refreshSubscriptionData();
     } else {
-      // Reset to defaults when logged out
       setTier("free");
       setRemainingSubmissions(tierSubmissionLimits.free);
       setIsLoading(false);
@@ -57,82 +60,51 @@ export function SubscriptionProvider({
 
   const refreshSubscriptionData = async () => {
     if (!user) return;
-
     setIsLoading(true);
     try {
-      // Get user's subscription data
-      const { data: subscriptionData, error: subscriptionError } =
-        await supabase
-          .from("user_subscriptions")
-          .select("*")
-          .eq("user_id", user.id)
-          .single();
+      const res = await fetch(`${API_URL}/api/subscription?userId=${user._id}`);
+      if (!res.ok) throw new Error("Failed to fetch subscription");
+      const data = await res.json();
 
-      if (subscriptionError && subscriptionError.code !== "PGRST116") {
-        console.error("Error fetching subscription:", subscriptionError);
-        throw subscriptionError;
-      }
-
-      // If no subscription found, create a free tier entry
-      if (!subscriptionData) {
-        const currentMonth = new Date().getMonth() + 1;
-        const currentYear = new Date().getFullYear();
-
-        const { error: insertError } = await supabase
-          .from("user_subscriptions")
-          .insert({
-            user_id: user.id,
+      if (!data.subscription) {
+        // Create free tier if not found
+        const now = new Date();
+        await fetch(`${API_URL}/api/subscription`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user._id,
             tier: "free",
             remaining_submissions: tierSubmissionLimits.free,
-            month: currentMonth,
-            year: currentYear,
-          });
-
-        if (insertError) {
-          console.error("Error creating subscription:", insertError);
-          throw insertError;
-        }
-
+            month: now.getMonth() + 1,
+            year: now.getFullYear(),
+          }),
+        });
         setTier("free");
         setRemainingSubmissions(tierSubmissionLimits.free);
       } else {
-        // Check if we need to reset monthly submissions
-        const currentMonth = new Date().getMonth() + 1;
-        const currentYear = new Date().getFullYear();
-
-        if (
-          subscriptionData.month !== currentMonth ||
-          subscriptionData.year !== currentYear
-        ) {
-          // Reset submissions for the new month
-          const { error: updateError } = await supabase
-            .from("user_subscriptions")
-            .update({
-              remaining_submissions:
-                tierSubmissionLimits[subscriptionData.tier as SubscriptionTier],
-              month: currentMonth,
-              year: currentYear,
-            })
-            .eq("user_id", user.id);
-
-          if (updateError) {
-            console.error("Error updating subscription:", updateError);
-            throw updateError;
-          }
-
-          setTier(subscriptionData.tier as SubscriptionTier);
-          setRemainingSubmissions(
-            tierSubmissionLimits[subscriptionData.tier as SubscriptionTier],
-          );
+        const { tier, remaining_submissions, month, year } = data.subscription;
+        const now = new Date();
+        if (month !== now.getMonth() + 1 || year !== now.getFullYear()) {
+          // Reset for new month
+          await fetch(`${API_URL}/api/subscription`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: user._id,
+              remaining_submissions: tierSubmissionLimits[tier as SubscriptionTier],
+              month: now.getMonth() + 1,
+              year: now.getFullYear(),
+            }),
+          });
+          setTier(tier as SubscriptionTier);
+          setRemainingSubmissions(tierSubmissionLimits[tier as SubscriptionTier]);
         } else {
-          // Use existing data
-          setTier(subscriptionData.tier as SubscriptionTier);
-          setRemainingSubmissions(subscriptionData.remaining_submissions);
+          setTier(tier as SubscriptionTier);
+          setRemainingSubmissions(remaining_submissions);
         }
       }
     } catch (error) {
-      console.error("Subscription data error:", error);
-      // Fallback to free tier on error
       setTier("free");
       setRemainingSubmissions(tierSubmissionLimits.free);
     } finally {
@@ -143,155 +115,98 @@ export function SubscriptionProvider({
   const deductSubmission = async (): Promise<boolean> => {
     if (!user) return false;
     if (remainingSubmissions <= 0) return false;
-
     try {
-      const { error } = await supabase
-        .from("user_subscriptions")
-        .update({
-          remaining_submissions: remainingSubmissions - 1,
-        })
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-
+      const res = await fetch(`${API_URL}/api/subscription/deduct`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user._id }),
+      });
+      if (!res.ok) throw new Error("Failed to deduct submission");
       setRemainingSubmissions((prev) => prev - 1);
       return true;
     } catch (error) {
-      console.error("Error deducting submission:", error);
       return false;
     }
   };
 
   const getSubmissionFee = (): number | null => {
-    // If user has remaining submissions, no fee
     if (remainingSubmissions > 0) return null;
-
-    // Pay-per-submission fee for those who've used up their quota
     return 2.99;
   };
 
-  // Create a checkout session for a single submission payment
+  // Stripe Checkout for single submission
   const createCheckoutSession = async (contestId: string) => {
-    if (!user || !session) {
+    if (!user) {
       return { sessionUrl: null, error: "User not authenticated" };
     }
-
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-payment_api",
-        {
-          body: {
-            contestId,
-            returnUrl: `${window.location.origin}/payment-success`,
-          },
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        },
-      );
-
-      if (error) {
-        console.error("Error creating checkout session:", error);
-        return { sessionUrl: null, error: error.message };
+      const res = await fetch(`${API_URL}/api/stripe/checkout-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user._id,
+          contestId,
+          returnUrl: `${window.location.origin}/payment-success`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.sessionId) {
+        return { sessionUrl: null, error: data.error || "No session ID returned" };
       }
-
-      if (!data?.sessionUrl) {
-        return {
-          sessionUrl: null,
-          error: "No session URL returned from payment API",
-        };
+      // Use Stripe.js to redirect
+      const stripe = await stripePromise;
+      if (stripe) {
+        await stripe.redirectToCheckout({ sessionId: data.sessionId });
       }
-
-      return { sessionUrl: data.sessionUrl, error: null };
+      return { sessionUrl: data.sessionId, error: null };
     } catch (error) {
-      console.error("Error creating checkout session:", error);
-      return {
-        sessionUrl: null,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
+      return { sessionUrl: null, error: error instanceof Error ? error.message : "Unknown error" };
     }
   };
 
-  // Create a checkout session for a subscription plan
+  // Stripe Checkout for subscription
   const createSubscriptionCheckout = async (planTier: string) => {
-    if (!user || !session) {
+    if (!user) {
       return { sessionUrl: null, error: "User not authenticated" };
     }
-
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-payment_api",
-        {
-          body: {
-            planTier,
-            returnUrl: `${window.location.origin}/payment-success`,
-          },
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        },
-      );
-
-      if (error) {
-        console.error("Error creating subscription checkout:", error);
-        return { sessionUrl: null, error: error.message };
+      const res = await fetch(`${API_URL}/api/stripe/subscription-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user._id,
+          planTier,
+          returnUrl: `${window.location.origin}/payment-success`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.sessionId) {
+        return { sessionUrl: null, error: data.error || "No session ID returned" };
       }
-
-      if (!data?.sessionUrl) {
-        return {
-          sessionUrl: null,
-          error: "No session URL returned from payment API",
-        };
+      const stripe = await stripePromise;
+      if (stripe) {
+        await stripe.redirectToCheckout({ sessionId: data.sessionId });
       }
-
-      return { sessionUrl: data.sessionUrl, error: null };
+      return { sessionUrl: data.sessionId, error: null };
     } catch (error) {
-      console.error("Error creating subscription checkout:", error);
-      return {
-        sessionUrl: null,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
+      return { sessionUrl: null, error: error instanceof Error ? error.message : "Unknown error" };
     }
   };
 
-  // Verify a payment session
   const verifyPaymentSession = async (sessionId: string) => {
-    if (!user || !session) {
+    if (!user) {
       return { success: false, error: "User not authenticated" };
     }
-
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-payment_api",
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          queryParams: { session_id: sessionId },
-        },
-      );
-
-      if (error) {
-        console.error("Error verifying payment session:", error);
-        return { success: false, error: error.message };
+      const res = await fetch(`${API_URL}/api/stripe/verify-session?sessionId=${sessionId}&userId=${user.id}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || "Payment verification failed" };
       }
-
-      if (data.success) {
-        // Refresh subscription data to get updated submission count
-        await refreshSubscriptionData();
-        return { success: true, error: null };
-      }
-
-      return { success: false, error: "Payment verification failed" };
+      await refreshSubscriptionData();
+      return { success: true, error: null };
     } catch (error) {
-      console.error("Error verifying payment session:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   };
 
@@ -309,6 +224,7 @@ export function SubscriptionProvider({
 
   return (
     <SubscriptionContext.Provider value={value}>
+      {/* Optionally wrap children in <Elements> if you use Stripe Elements elsewhere */}
       {children}
     </SubscriptionContext.Provider>
   );
@@ -316,7 +232,7 @@ export function SubscriptionProvider({
 
 export function useSubscription() {
   const context = useContext(SubscriptionContext);
-  if (context === undefined) {
+  if ( context === undefined) {
     throw new Error(
       "useSubscription must be used within a SubscriptionProvider",
     );

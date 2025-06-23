@@ -1,5 +1,8 @@
 const Challenge = require('../models/Challenge');
 
+// Contest Analytics Model (create this model if it doesn't exist)
+const ContestAnalytics = require('../models/ContestAnalytics');
+
 // Create a new challenge
 exports.createChallenge = async (req, res) => {
   try {
@@ -72,6 +75,16 @@ exports.getActiveChallenge = async (req, res) => {
       return res.status(404).json({ message: "No active contest found" });
     }
     res.status(200).json(challenge);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get all contest analytics
+exports.getAllContestAnalytics = async (req, res) => {
+  try {
+    const analytics = await ContestAnalytics.find();
+    res.status(200).json(analytics);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

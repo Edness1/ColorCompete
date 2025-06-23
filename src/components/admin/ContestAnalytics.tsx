@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/use-toast";
 import {
   Card,
@@ -10,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Eye, Download, Upload, Heart } from "lucide-react";
+import { API_URL } from "@/lib/utils";
 
 interface ContestAnalytics {
   id: string;
@@ -26,8 +26,8 @@ interface Contest {
   id: string;
   title: string;
   status: string;
-  start_date: string;
-  end_date: string;
+  startDate: string;
+  endDate: string;
 }
 
 interface ContestWithAnalytics extends Contest {
@@ -48,35 +48,33 @@ export default function ContestAnalytics() {
   async function fetchContestsWithAnalytics() {
     setIsLoading(true);
     try {
-      // First, fetch all contests
-      const { data: contests, error: contestsError } = await supabase
-        .from("contests")
-        .select("id, title, status, start_date, end_date")
-        .order("start_date", { ascending: false });
+      // Fetch all contests from the API
+      const contestsRes = await fetch(
+        `${API_URL}/api/challenges`,
+      );
+      if (!contestsRes.ok) throw new Error("Failed to fetch contests");
+      const contests: Contest[] = await contestsRes.json();
 
-      if (contestsError) throw contestsError;
-
-      // Then, fetch analytics for all contests
-      const { data: analytics, error: analyticsError } = await supabase
-        .from("contest_analytics")
-        .select("*");
-
-      if (analyticsError) throw analyticsError;
+      // Fetch analytics for all contests from the API
+      const analyticsRes = await fetch(
+        `${API_URL}/api/challenges/analytics/contest-analytics`,
+      );
+      if (!analyticsRes.ok) throw new Error("Failed to fetch analytics");
+      const analytics: ContestAnalytics[] = await analyticsRes.json();
 
       // Combine the data
       const combined = contests.map((contest) => {
-        const contestAnalytics = analytics.find(
-          (a) => a.contest_id === contest.id,
-        ) || {
-          id: "",
-          contest_id: contest.id,
-          views: 0,
-          downloads: 0,
-          submissions: 0,
-          votes: 0,
-          created_at: "",
-          updated_at: "",
-        };
+        const contestAnalytics =
+          analytics.find((a) => a.contest_id === contest.id) || {
+            id: "",
+            contest_id: contest.id,
+            views: 0,
+            downloads: 0,
+            submissions: 0,
+            votes: 0,
+            created_at: "",
+            updated_at: "",
+          };
 
         return {
           ...contest,
@@ -166,12 +164,14 @@ export default function ContestAnalytics() {
                     <div>
                       <CardTitle className="text-lg">{contest.title}</CardTitle>
                       <CardDescription>
-                        {formatDate(contest.start_date)} -{" "}
-                        {formatDate(contest.end_date)}
+                        {formatDate(contest.startDate)} -{" "}
+                        {formatDate(contest.endDate)}
                       </CardDescription>
                     </div>
                     <div
-                      className={`px-2 py-1 rounded-full text-white text-xs ${getStatusColor(contest.status)}`}
+                      className={`px-2 py-1 rounded-full text-white text-xs ${getStatusColor(
+                        contest.status,
+                      )}`}
                     >
                       {contest.status.charAt(0).toUpperCase() +
                         contest.status.slice(1)}
