@@ -1,17 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const subscriptionController = require('../controllers/subscriptionController');
+const stripeController = require('../controllers/stripeController');
 
-// GET subscription by userId
-router.get('/', subscriptionController.getSubscriptionByUserId);
+// Route for single submission checkout session
+router.post('/checkout-session', stripeController.createCheckoutSession);
 
-// POST create a new subscription
-router.post('/', subscriptionController.createSubscription);
+// Route for subscription checkout session
+router.post('/subscription-session', stripeController.createSubscriptionSession);
 
-// PUT update/reset subscription
-router.put('/', subscriptionController.updateSubscription);
-
-// POST deduct a submission
-router.post('/deduct', subscriptionController.deductSubmission);
+// Route to verify a Stripe session
+router.get('/verify-session', stripeController.verifySession);
 
 module.exports = router;

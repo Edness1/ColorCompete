@@ -284,7 +284,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[800px] bg-background">
+      <DialogContent style={{ maxHeight: "90vh", overflowY: "auto" }} className="sm:max-w-[800px] bg-background">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-center">
             Submit Your Colored Artwork

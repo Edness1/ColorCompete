@@ -38,13 +38,13 @@ exports.createSubscription = async (req, res) => {
 // Update subscription (reset submissions)
 exports.updateSubscription = async (req, res) => {
   try {
-    const { userId, remaining_submissions, month, year } = req.body;
+    const { userId, tier, remaining_submissions, month, year } = req.body;
     if (!userId) {
       return res.status(400).json({ message: 'Missing userId' });
     }
     const subscription = await Subscription.findOneAndUpdate(
       { userId },
-      { remaining_submissions, month, year },
+      { tier, remaining_submissions, month, year },
       { new: true }
     );
     if (!subscription) {

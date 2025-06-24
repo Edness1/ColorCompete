@@ -72,8 +72,11 @@ exports.createSubscriptionSession = async (req, res) => {
 
 // Verify a Stripe session (expand as needed)
 exports.verifySession = async (req, res) => {
+    console.log('Verifying Stripe session');
   try {
     const { sessionId } = req.query;
+
+    console.log('Verifying Stripe session', sessionId);
     if (!sessionId) {
       return res.status(400).json({ message: 'Missing sessionId' });
     }

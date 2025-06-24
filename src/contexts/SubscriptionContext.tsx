@@ -83,6 +83,7 @@ export function SubscriptionProvider({
         setTier("free");
         setRemainingSubmissions(tierSubmissionLimits.free);
       } else {
+        console.log("Subscription data:", data.subscription);
         const { tier, remaining_submissions, month, year } = data.subscription;
         const now = new Date();
         if (month !== now.getMonth() + 1 || year !== now.getFullYear()) {
@@ -180,6 +181,7 @@ export function SubscriptionProvider({
         }),
       });
       const data = await res.json();
+      localStorage.setItem('sessionId', data.sessionId || '');
       if (!res.ok || !data.sessionId) {
         return { sessionUrl: null, error: data.error || "No session ID returned" };
       }
@@ -198,11 +200,41 @@ export function SubscriptionProvider({
       return { success: false, error: "User not authenticated" };
     }
     try {
-      const res = await fetch(`${API_URL}/api/stripe/verify-session?sessionId=${sessionId}&userId=${user.id}`);
+      const res = await fetch(`${API_URL}/api/stripe/verify-session?sessionId=${sessionId}&userId=${user._id}`);
       const data = await res.json();
-      if (!res.ok || !data.success) {
+      if (!res.ok || data.session.payment_status !== "paid") {
         return { success: false, error: data.error || "Payment verification failed" };
       }
+      // Extract purchased tier and submissions from payment session metadata or response
+      const purchasedTier = data.session.metadata?.planTier; // fallback or adjust as needed
+      const purchasedSubmissions = tierSubmissionLimits[purchasedTier as SubscriptionTier];
+
+      // Fetch current subscription to get existing remaining submissions
+      let currentRemaining = 0;
+      try {
+        const subRes = await fetch(`${API_URL}/api/subscription?userId=${user._id}`);
+        if (subRes.ok) {
+          const subData = await subRes.json();
+          currentRemaining = subData.subscription?.remaining_submissions || 0;
+        }
+      } catch (e) {
+        // If fetch fails, assume 0
+        currentRemaining = 0;
+      }
+
+      // Update or create subscription with sum of current and purchased submissions
+      await fetch(`${API_URL}/api/subscription`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user._id,
+          tier: purchasedTier,
+          remaining_submissions: currentRemaining + purchasedSubmissions,
+          month: new Date().getMonth() + 1,
+          year: new Date().getFullYear(),
+        }),
+      });
+
       await refreshSubscriptionData();
       return { success: true, error: null };
     } catch (error) {

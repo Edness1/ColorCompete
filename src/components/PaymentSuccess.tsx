@@ -11,20 +11,20 @@ import {
 } from "./ui/card";
 import { useSubscription } from "../contexts/SubscriptionContext";
 import { useToast } from "./ui/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 const PaymentSuccess = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { verifyPaymentSession, refreshSubscriptionData } = useSubscription();
   const { toast } = useToast();
   const [isVerifying, setIsVerifying] = useState(true);
   const [verificationSuccess, setVerificationSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     const verifyPayment = async () => {
-      const queryParams = new URLSearchParams(location.search);
-      const sessionId = queryParams.get("session_id");
+      const sessionId = localStorage.getItem("sessionId");
 
       if (!sessionId) {
         setError("No payment session ID found");
@@ -39,6 +39,7 @@ const PaymentSuccess = () => {
           setVerificationSuccess(true);
           // Refresh subscription data to get updated submission count
           await refreshSubscriptionData();
+          localStorage.removeItem("sessionId"); // Clear session ID after verification
           toast({
             title: "Payment Successful",
             description: "Your payment was processed successfully.",
@@ -68,7 +69,7 @@ const PaymentSuccess = () => {
     };
 
     verifyPayment();
-  }, [location.search, verifyPaymentSession, refreshSubscriptionData, toast]);
+  }, [toast, user]);
 
   const handleContinue = () => {
     // Navigate back to the home page or contest page
