@@ -240,8 +240,8 @@ const UserProfile = ({
     apiProfile?.avatarUrl ||
     profile?.avatar_url ||
     initialAvatarUrl;
-  const joinDate = apiProfile?.createdAt
-    ? new Date(apiProfile.createdAt).toLocaleDateString("en-US", {
+  const joinDate = apiProfile?.createdDate
+    ? new Date(apiProfile.createdDate).toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
       })

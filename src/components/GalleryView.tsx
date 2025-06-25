@@ -144,11 +144,6 @@ const GalleryView = ({
     }
   }, [user]);
 
-  useEffect(() => {
-
-    console.log(gallerySubmissions)
-  }, [gallerySubmissions]);
-
   const handleVote = async (id: string) => {
     await toggleVote(id);
   };
@@ -257,6 +252,28 @@ const GalleryView = ({
     filterSubmissions(filter, ageFilter, format);
   };
 
+  // Helper to check if a date is today
+  const isToday = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    return (
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
+    );
+  };
+
+  // Filter submissions based on activeTab
+  const filteredSubmissions = gallerySubmissions.filter((submission) => {
+    if (activeTab === "today") {
+      return isToday(submission.submissionDate);
+    }
+    if (activeTab === "past") {
+      return !isToday(submission.submissionDate);
+    }
+    return true; // "all"
+  });
+
   return (
     <div className="container mx-auto py-8 bg-background">
       <MainHeader />
@@ -267,6 +284,7 @@ const GalleryView = ({
           <Tabs
             defaultValue="all"
             className="w-full sm:w-auto"
+            value={activeTab}
             onValueChange={setActiveTab}
           >
             <TabsList>
@@ -374,7 +392,7 @@ const GalleryView = ({
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {gallerySubmissions.map((submission) => (
+            {filteredSubmissions.map((submission) => (
               <Card
                 key={submission.id}
                 className="overflow-hidden hover:shadow-lg transition-shadow"
@@ -523,7 +541,7 @@ const GalleryView = ({
             ))}
           </div>
 
-          {gallerySubmissions.length === 0 && (
+          {filteredSubmissions.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12">
               <p className="text-muted-foreground text-lg">
                 No submissions found

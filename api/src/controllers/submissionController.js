@@ -191,9 +191,8 @@ function mapToLeaderboardEntry(sub, index) {
 exports.getCurrentLeaderboard = async (req, res) => {
   try {
     const now = new Date();
-    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-    const submissions = await Submission.find({ created_at: { $lte: now } })
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const submissions = await Submission.find({ created_at: { $gte: startOfToday, $lte: now } })
       .lean();
     submissions.sort((a, b) => (b.votes?.length || 0) - (a.votes?.length || 0));
     res.json(submissions.map(mapToLeaderboardEntry));
