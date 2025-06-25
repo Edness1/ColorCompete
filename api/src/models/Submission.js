@@ -12,7 +12,8 @@ const SubmissionSchema = new mongoose.Schema({
   profiles: {
     username: { type: String },
     avatar_url: { type: String }
-  }
+  },
+  isWinner: { type: Boolean, default: false } // <-- Added field
 });
 
 module.exports = mongoose.model('Submission', SubmissionSchema);

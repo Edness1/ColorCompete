@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_URL } from "@/lib/utils";
 
 interface UserStats {
   totalSubmissions: number;
@@ -30,47 +30,19 @@ export function useUserStats(): UserStats {
 
     const fetchUserStats = async () => {
       try {
-        // Get total submissions count
-        const { count: submissionsCount, error: submissionsError } =
-          await supabase
-            .from("submissions")
-            .select("*", { count: "exact", head: true })
-            .eq("user_id", user.id);
-
-        if (submissionsError) throw submissionsError;
-
-        // Get total votes received
-        const { data: submissions, error: votesError } = await supabase
-          .from("submissions")
-          .select("votes")
-          .eq("user_id", user.id);
-
-        if (votesError) throw votesError;
-
-        const totalVotes =
-          submissions?.reduce((sum, sub) => sum + (sub.votes || 0), 0) || 0;
-
-        // Get unique contests participated in
-        const { data: contestData, error: contestError } = await supabase
-          .from("submissions")
-          .select("contest_id")
-          .eq("user_id", user.id);
-
-        if (contestError) throw contestError;
-
-        const uniqueContests = new Set(
-          contestData?.map((item) => item.contest_id).filter(Boolean),
+        const response = await fetch(
+          `${API_URL}/api/users/user-stats/user?user_id=${user._id}`,
         );
-
-        // For now, we'll simulate win count since we don't have that data structure yet
-        // In a real implementation, you would query a winners table or similar
-        const winCount = Math.floor(Math.random() * 3); // Simulate 0-2 wins
+        if (!response.ok) {
+          throw new Error("Failed to fetch user stats");
+        }
+        const data = await response.json();
 
         setStats({
-          totalSubmissions: submissionsCount || 0,
-          totalVotes,
-          winCount,
-          contestsParticipated: uniqueContests.size,
+          totalSubmissions: data.totalSubmissions || 0,
+          totalVotes: data.totalVotes || 0,
+          winCount: data.winCount || 0,
+          contestsParticipated: data.contestsParticipated || 0,
           isLoading: false,
           error: null,
         });

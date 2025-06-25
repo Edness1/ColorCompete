@@ -29,7 +29,7 @@ interface Submission {
   id: string;
   imageUrl: string;
   artistName: string;
-  voteCount: number;
+  voteCount: number; // Always a number
   submissionDate: string;
   hasVoted: boolean;
   ageGroup?: string;
@@ -80,7 +80,6 @@ const GalleryView = ({
     const fetchSubmissions = async () => {
       setFetchingSubmissions(true);
       try {
-        // Fetch from your backend API, which uses the Submission model
         const response = await fetch(`${API_URL}/api/submissions`);
         if (!response.ok) {
           throw new Error("Failed to fetch submissions from API");
@@ -88,21 +87,37 @@ const GalleryView = ({
         const data = await response.json();
 
         if (data && Array.isArray(data) && data.length > 0) {
-          // Map fields based on api/src/models/Submission.js
-          const transformedData: Submission[] = data.map((item) => ({
-            id: item._id || item.id,
-            imageUrl:
-              item.file_path ||
-              "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80",
-            artistName: item.profiles.username || item.artist_name || "Anonymous",
-            voteCount: item.voteCount ?? item.votes ?? item.vote_count ?? 0,
-            submissionDate: item.submissionDate || item.createdAt || item.created_at || new Date().toISOString(),
-            hasVoted: false, // Update if your API returns user vote info
-            ageGroup: item.ageGroup || item.age_group,
-            contestType: item.contestType || item.medium || item.contest_type,
-            user_id: item.user_id,
-            public_url: item.public_url,
-          }));
+          const transformedData: Submission[] = await Promise.all(
+            data.map(async (item) => {
+              const id = item._id || item.id;
+              // Use checkUserVote to determine if the user has voted
+              const hasVoted = await checkUserVote(id);
+              return {
+                id,
+                imageUrl:
+                  item.file_path ||
+                  "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80",
+                artistName: item.profiles?.username || item.artist_name || "Anonymous",
+                voteCount: Array.isArray(item.voteCount)
+                  ? item.voteCount.length
+                  : typeof item.voteCount === "number"
+                    ? item.voteCount
+                    : Array.isArray(item.votes)
+                      ? item.votes.length
+                      : typeof item.votes === "number"
+                        ? item.votes
+                        : typeof item.vote_count === "number"
+                          ? item.vote_count
+                          : 0,
+                submissionDate: item.submissionDate || item.createdAt || item.created_at || new Date().toISOString(),
+                hasVoted,
+                ageGroup: item.ageGroup || item.age_group,
+                contestType: item.contestType || item.medium || item.contest_type,
+                user_id: item.user_id,
+                public_url: item.public_url,
+              };
+            })
+          );
 
           setOriginalSubmissions(transformedData);
           setGallerySubmissions(transformedData);
@@ -128,6 +143,11 @@ const GalleryView = ({
       fetchSubmissions();
     }
   }, [user]);
+
+  useEffect(() => {
+
+    console.log(gallerySubmissions)
+  }, [gallerySubmissions]);
 
   const handleVote = async (id: string) => {
     await toggleVote(id);

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const Submission = require('../models/Submission');
 
 // Create a new user
 exports.createUser = async (req, res) => {
@@ -124,6 +125,29 @@ exports.login = async (req, res) => {
     }
     // Optionally, generate a JWT token here for session management
     res.status(200).json({ message: 'Login successful', user });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get user stats
+exports.getUserStats = async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    if (!user_id) {
+      return res.status(400).json({ message: "Missing user_id" });
+    }
+
+    // Replace these with your actual models and logic
+    const totalSubmissions = await Submission.countDocuments({ user_id: user_id });
+    const winCount = await Submission.countDocuments({ user_id: user_id, isWinner: true });
+    const contestsParticipated = await Submission.distinct("contest", { user_id: user_id }).then(arr => arr.length);
+
+    res.json({
+      totalSubmissions,
+      winCount,
+      contestsParticipated,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

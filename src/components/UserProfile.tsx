@@ -50,6 +50,7 @@ import { useUserStats } from "@/hooks/useUserStats";
 import { supabase } from "@/lib/supabase";
 import { Link } from "react-router-dom";
 import { MainHeader } from "./header";
+import { API_URL } from "@/lib/utils";
 
 interface Submission {
   id: string;
@@ -182,20 +183,18 @@ const UserProfile = ({
     fetchApiProfile();
   }, [user]);
 
-  // Fetch user profile data from Supabase
+  // Fetch user profile data from Supabase (replace with API)
   useEffect(() => {
     if (user) {
       setIsLoading(true);
+
+      // Fetch profile from API
       const fetchProfile = async () => {
         try {
-          const { data, error } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("_id", user._id)
-            .single();
-
-          if (error) throw error;
-          if (data) setProfile(data);
+          const res = await fetch(`${API_URL}/api/users/${user._id}`);
+          if (!res.ok) throw new Error("Failed to fetch profile");
+          const data = await res.json();
+          setProfile(data);
         } catch (error) {
           console.error("Error fetching profile:", error);
         } finally {
@@ -203,26 +202,22 @@ const UserProfile = ({
         }
       };
 
-      // Fetch user submissions
+      // Fetch user submissions from API
       const fetchSubmissions = async () => {
         try {
-          const { data, error } = await supabase
-            .from("submissions")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false });
-
-          if (error) throw error;
+          const res = await fetch(`${API_URL}/api/submissions?user_id=${user._id}`);
+          if (!res.ok) throw new Error("Failed to fetch submissions");
+          const data = await res.json();
           if (data && data.length > 0) {
             setUserSubmissions(
               data.map((sub: any) => ({
                 id: sub.id,
                 title: sub.title || "Untitled Submission",
-                imageUrl: sub.public_url,
-                date: new Date(sub.created_at).toLocaleDateString(),
+                imageUrl: sub.file_path || sub.file_path,
+                date: new Date(sub.created_at || sub.date).toLocaleDateString(),
                 votes: sub.votes || 0,
-                contestId: sub.contest_id,
-                contestName: sub.contest_type || "Daily Contest",
+                contestId: sub.contest_id || sub.contestId,
+                contestName: sub.contest_type || sub.contestName || "Daily Contest",
               })),
             );
           }
@@ -268,6 +263,59 @@ const UserProfile = ({
     ? userStats.totalSubmissions
     : submissions.length;
 
+  // Add state for each profile field
+  const [editUsername, setEditUsername] = useState(username);
+  const [editEmail, setEditEmail] = useState(email);
+  const [editFirstName, setEditFirstName] = useState(firstName);
+  const [editLastName, setEditLastName] = useState(lastName);
+  const [editBio, setEditBio] = useState(bio);
+  const [editLocation, setEditLocation] = useState(apiProfile?.location || "");
+  const [editWebsite, setEditWebsite] = useState(apiProfile?.website || "");
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateSuccess, setUpdateSuccess] = useState(false);
+
+  // When apiProfile loads, update the edit fields
+  useEffect(() => {
+    setEditUsername(apiProfile?.username || username);
+    setEditEmail(apiProfile?.email || email);
+    setEditFirstName(apiProfile?.firstName || firstName);
+    setEditLastName(apiProfile?.lastName || lastName);
+    setEditBio(apiProfile?.bio || bio);
+    setEditLocation(apiProfile?.location || "");
+    setEditWebsite(apiProfile?.website || "");
+  }, [apiProfile]);
+
+  // Handle update
+  const handleUpdateProfile = async () => {
+    if (!user?._id) return;
+    setUpdateLoading(true);
+    setUpdateError(null);
+    setUpdateSuccess(false);
+    try {
+      const res = await fetch(`${API_URL}/api/users/${user._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: editUsername,
+          email: editEmail,
+          firstName: editFirstName,
+          lastName: editLastName,
+          bio: editBio,
+          location: editLocation,
+          website: editWebsite,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to update profile");
+      setUpdateSuccess(true);
+      // Optionally, refresh profile data here
+    } catch (err: any) {
+      setUpdateError(err.message || "Update failed");
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
   return (
     <div className="w-full max-w-5xl mx-auto p-4 bg-background">
       <MainHeader />
@@ -295,10 +343,6 @@ const UserProfile = ({
               </div>
             </div>
           </div>
-          <Button variant="outline" className="mt-4 md:mt-0" size="sm">
-            <Settings className="mr-2 h-4 w-4" />
-            Edit Profile
-          </Button>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">{bio}</p>
@@ -381,7 +425,7 @@ const UserProfile = ({
                     <span className="text-sm text-muted-foreground">
                       {submission.date}
                     </span>
-                    <Badge>{submission.votes} votes</Badge>
+                    <Badge>{submission.votes.length} votes</Badge>
                   </CardFooter>
                 </Card>
               ))}
@@ -503,49 +547,78 @@ const UserProfile = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="username">Username</Label>
-                  <Input id="username" defaultValue={username} />
+                  <Input
+                    id="username"
+                    value={editUsername}
+                    onChange={e => setEditUsername(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
                     type="email"
-                    defaultValue={email}
+                    value={editEmail}
+                    onChange={e => setEditEmail(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" defaultValue={firstName} />
+                  <Input
+                    id="firstName"
+                    value={editFirstName}
+                    onChange={e => setEditFirstName(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" defaultValue={lastName} />
+                  <Input
+                    id="lastName"
+                    value={editLastName}
+                    onChange={e => setEditLastName(e.target.value)}
+                  />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="bio">Bio</Label>
                 <Textarea
                   id="bio"
-                  defaultValue={bio}
+                  value={editBio}
+                  onChange={e => setEditBio(e.target.value)}
                   placeholder="Tell us about yourself..."
                   className="min-h-[100px]"
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="location">Location</Label>
-                <Input id="location" placeholder="City, Country" />
+                <Input
+                  id="location"
+                  value={editLocation}
+                  onChange={e => setEditLocation(e.target.value)}
+                  placeholder="City, Country"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="website">Website</Label>
                 <Input
                   id="website"
                   type="url"
+                  value={editWebsite}
+                  onChange={e => setEditWebsite(e.target.value)}
                   placeholder="https://yourwebsite.com"
                 />
               </div>
+              {updateError && (
+                <div className="text-destructive text-sm">{updateError}</div>
+              )}
+              {updateSuccess && (
+                <div className="text-green-600 text-sm">Profile updated!</div>
+              )}
             </CardContent>
             <CardFooter>
-              <Button>Update Profile</Button>
+              <Button onClick={handleUpdateProfile} disabled={updateLoading}>
+                {updateLoading ? "Updating..." : "Update Profile"}
+              </Button>
             </CardFooter>
           </Card>
 
