@@ -14,6 +14,13 @@ import { SubscriptionProvider } from "./contexts/SubscriptionContext";
 import AdminRoute from "./components/admin/AdminRoute";
 import routes from "tempo-routes";
 import RequireAuth from "./components/auth/RequireAuth";
+import Rewards from "./components/Rewards";
+import FAQ from "./components/FAQ";
+import Contact from "./components/Contact";
+import Terms from "./components/Terms";
+import Privacy from "./components/Privacy";
+import ForgotPassword from "./components/auth/ForgotPassword";
+import BillingHistory from "./components/BillingHistory";
 
 // Lazy load admin components
 const AdminDashboard = lazy(() => import("./components/admin/AdminDashboard"));
@@ -38,10 +45,17 @@ function App() {
                 }
               />
               <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/rewards" element={<Rewards />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/about" element={<About />} />
+              <Route path="/faq" element={<FAQ />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="/payment-success" element={<PaymentSuccess />} />
               <Route path="/payment-cancel" element={<PaymentCancel />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/billing-history" element={<BillingHistory />} />
 
               {/* Admin routes */}
               <Route path="/admin" element={<AdminRoute />}>

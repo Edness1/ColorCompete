@@ -52,6 +52,12 @@ export const MainHeader = () => {
             Leaderboard
         </Link>
         <Link
+            to="/rewards"
+            className="font-medium text-muted-foreground hover:text-primary transition-colors"
+        >
+            Rewards
+        </Link>
+        <Link
             to="/pricing"
             className="font-medium text-muted-foreground hover:text-primary transition-colors"
         >

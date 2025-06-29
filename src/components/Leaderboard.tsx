@@ -62,10 +62,10 @@ const Leaderboard = ({
     setLoading(true);
     // Example endpoints, adjust as needed to match your API
     Promise.all([
-      fetch(API_URL+"/api/submissions/submissions/current").then((res) => res.json()),
-      fetch(API_URL+"/api/submissions/submissions/weekly").then((res) => res.json()),
-      fetch(API_URL+"/api/submissions/submissions/monthly").then((res) => res.json()),
-      fetch(API_URL+"/api/submissions/submissions/all-time").then((res) => res.json()),
+      fetch(API_URL+"/api/submissions/submissions/current/now").then((res) => res.json()),
+      fetch(API_URL+"/api/submissions/submissions/weekly/now").then((res) => res.json()),
+      fetch(API_URL+"/api/submissions/submissions/monthly/now").then((res) => res.json()),
+      fetch(API_URL+"/api/submissions/submissions/all-time/now").then((res) => res.json()),
     ])
       .then(([current, weekly, monthly, allTime]) => {
         console.log(current, weekly, monthly, allTime)
@@ -155,7 +155,37 @@ const Leaderboard = ({
             <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
               <Tabs
                 value={activeTab}
-                onValueChange={setActiveTab}
+                onValueChange={(tab) => {
+                  setActiveTab(tab);
+                  setLoading(true);
+                  // Refetch leaderboard data for the selected tab
+                  let endpoint = "";
+                  switch (tab) {
+                    case "current":
+                      endpoint = "/api/submissions/submissions/current/now";
+                      break;
+                    case "weekly":
+                      endpoint = "/api/submissions/submissions/weekly/now";
+                      break;
+                    case "monthly":
+                      endpoint = "/api/submissions/submissions/monthly/now";
+                      break;
+                    case "all-time":
+                      endpoint = "/api/submissions/submissions/all-time/now";
+                      break;
+                    default:
+                      endpoint = "/api/submissions/submissions/current/now";
+                  }
+                  fetch(API_URL + endpoint)
+                    .then((res) => res.json())
+                    .then((data) => {
+                      if (tab === "current") setCurrentLeaders(data);
+                      if (tab === "weekly") setWeeklyLeaders(data);
+                      if (tab === "monthly") setMonthlyLeaders(data);
+                      if (tab === "all-time") setAllTimeLeaders(data);
+                    })
+                    .finally(() => setLoading(false));
+                }}
                 className="w-full sm:w-auto"
               >
                 <TabsList>

@@ -226,13 +226,15 @@ exports.getWeeklyLeaderboard = async (req, res) => {
 exports.getMonthlyLeaderboard = async (req, res) => {
   try {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    startOfMonth.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const submissions = await Submission.find({ created_at: { $gte: startOfMonth } })
-      .lean();
-    submissions.sort((a, b) => (b.votes?.length || 0) - (a.votes?.length || 0));
-    res.json(submissions.map(mapToLeaderboardEntry));
+    // Get all submissions made this month
+    const submissions = await Submission.find({
+      created_at: { $lte: endOfMonth }
+    }).lean();
+
+    res.status(200).json(submissions.map(mapToLeaderboardEntry));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

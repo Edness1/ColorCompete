@@ -27,9 +27,9 @@ router.post('/submissions/:submissionId/vote', submissionController.addVote);
 router.delete('/submissions/:submissionId/vote', submissionController.removeVote);
 
 // Get leaderboards
-router.get('/submissions/current', submissionController.getCurrentLeaderboard);
-router.get('/submissions/weekly', submissionController.getWeeklyLeaderboard);
-router.get('/submissions/monthly', submissionController.getMonthlyLeaderboard);
-router.get('/submissions/all-time', submissionController.getAllTimeLeaderboard);
+router.get('/submissions/current/now', submissionController.getCurrentLeaderboard);
+router.get('/submissions/weekly/now', submissionController.getWeeklyLeaderboard);
+router.get('/submissions/monthly/now', submissionController.getMonthlyLeaderboard);
+router.get('/submissions/all-time/now', submissionController.getAllTimeLeaderboard);
 
 module.exports = router;
