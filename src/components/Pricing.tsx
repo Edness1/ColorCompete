@@ -7,8 +7,8 @@ import { Separator } from "./ui/separator";
 import { useAuth } from "../contexts/AuthContext";
 import { useSubscription } from "../contexts/SubscriptionContext";
 import { useToast } from "./ui/use-toast";
-import { MainHeader } from "./header";
 import { MainFooter } from "./footer";
+import { MainHeader } from "./header";
 
 const Pricing = () => {
   const { user, signOut, isLoading: authLoading } = useAuth();
@@ -77,7 +77,9 @@ const Pricing = () => {
       features: [
         "2 submissions/month",
         "Vote on submissions",
-        "Basic community badge",
+        "Digital badge for contest wins",
+        "Social media shoutout for top 3 finishes",
+        "Recognition in community gallery",
       ],
       ctaText: "Get Started",
       ctaVariant: "outline" as const,
@@ -88,8 +90,10 @@ const Pricing = () => {
       price: "$5/mo",
       features: [
         "5 submissions/month",
-        "Access voting + badge",
-        "Bonus content unlocks",
+        "All Color Curious rewards",
+        "Entry into monthly $25 cash prize drawing",
+        "Exclusive subscriber-only contests",
+        "Priority voting weight (1.5x)",
       ],
       ctaText: "Choose Plan",
       ctaVariant: "default" as const,
@@ -100,8 +104,11 @@ const Pricing = () => {
       price: "$10/mo",
       features: [
         "20 submissions/month",
-        "Priority feedback",
-        "Pro coloring tools",
+        "All Color Lite rewards",
+        "Entry into monthly $50 cash prize drawing",
+        "Access to premium line art collections",
+        "Double voting weight (2x)",
+        "Featured artist spotlight opportunities",
       ],
       ctaText: "Choose Plan",
       ctaVariant: "default" as const,
@@ -112,8 +119,12 @@ const Pricing = () => {
       price: "$20/mo",
       features: [
         "Unlimited submissions",
-        "Judge spotlight access",
-        "Exclusive prize contests",
+        "All Color Pro rewards",
+        "Entry into monthly $100 cash prize drawing",
+        "Custom line art requests",
+        "Triple voting weight (3x)",
+        "Direct feedback from professional artists",
+        "Early access to new features",
       ],
       ctaText: "Go All-In",
       ctaVariant: "default" as const,
@@ -171,10 +182,63 @@ const Pricing = () => {
           </div>
         </section>
 
+        {/* Rewards Information */}
+        <section className="mb-12">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold mb-4">Contest Winner Rewards</h2>
+            <p className="text-muted-foreground max-w-3xl mx-auto">
+              Every contest winner receives rewards based on their subscription
+              tier. The higher your tier, the better the rewards!
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 max-w-6xl mx-auto">
+            <Card className="text-center">
+              <CardContent className="pt-6">
+                <div className="text-4xl mb-2">🏆</div>
+                <h3 className="font-semibold mb-2">Color Curious & Lite</h3>
+                <p className="text-sm text-muted-foreground">
+                  Digital achievement badges to showcase your wins on your
+                  profile
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="text-center">
+              <CardContent className="pt-6">
+                <div className="text-4xl mb-2">📱</div>
+                <h3 className="font-semibold mb-2">Color Pro</h3>
+                <p className="text-sm text-muted-foreground">
+                  Social media shoutouts featuring your winning artwork
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="text-center">
+              <CardContent className="pt-6">
+                <div className="text-4xl mb-2">💰</div>
+                <h3 className="font-semibold mb-2">Color Champ</h3>
+                <p className="text-sm text-muted-foreground">
+                  Entries into monthly cash prize drawings
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="text-center">
+              <CardContent className="pt-6">
+                <div className="text-4xl mb-2">🎯</div>
+                <h3 className="font-semibold mb-2">All Tiers</h3>
+                <p className="text-sm text-muted-foreground">
+                  Recognition on leaderboards and in the winner's gallery
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
         {/* Additional Options */}
         <section className="text-center bg-muted/40 rounded-xl p-8">
           <p className="text-muted-foreground">
-            Also available: <strong>Pay-per-entry</strong> for $2.99 each, and{" "}
             <strong>Gift Packs</strong> & Classroom Licenses. No ads. Cancel
             anytime.
           </p>
