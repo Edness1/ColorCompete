@@ -1,4 +1,6 @@
 const Challenge = require('../models/Challenge');
+const Submission = require('../models/Submission');
+const emailAutomationService = require('../services/emailAutomationService');
 
 // Contest Analytics Model (create this model if it doesn't exist)
 const ContestAnalytics = require('../models/ContestAnalytics');
@@ -40,10 +42,39 @@ exports.getChallengeById = async (req, res) => {
 // Update a challenge
 exports.updateChallenge = async (req, res) => {
   try {
-    const challenge = await Challenge.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!challenge) {
+    const oldChallenge = await Challenge.findById(req.params.id);
+    if (!oldChallenge) {
       return res.status(404).json({ message: 'Challenge not found' });
     }
+    
+    const challenge = await Challenge.findByIdAndUpdate(req.params.id, req.body, { new: true })
+      .populate('winner');
+    
+    // Check if a winner was just set (winner didn't exist before but does now)
+    if (!oldChallenge.winner && challenge.winner && req.body.winner) {
+      try {
+        // Find the winning submission
+        const winningSubmission = await Submission.findOne({
+          challenge: challenge._id,
+          user: challenge.winner._id
+        });
+        
+        if (winningSubmission) {
+          // Trigger winner reward automation
+          await emailAutomationService.sendWinnerReward(
+            challenge.winner._id,
+            challenge.title,
+            winningSubmission.imageUrl
+          );
+          
+          console.log(`Winner reward triggered for challenge: ${challenge.title}, winner: ${challenge.winner.username}`);
+        }
+      } catch (emailError) {
+        console.error('Error triggering winner reward email:', emailError);
+        // Don't fail the challenge update if email fails
+      }
+    }
+    
     res.status(200).json(challenge);
   } catch (error) {
     res.status(400).json({ message: error.message });

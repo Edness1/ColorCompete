@@ -12,6 +12,12 @@ const UserSchema = new mongoose.Schema({
   website: { type: String },
   password: { type: String, required: true },
   loginNotification: { type: Boolean, default: false },
+  emailPreferences: {
+    marketingEmails: { type: Boolean, default: true },
+    contestNotifications: { type: Boolean, default: true },
+    winnerAnnouncements: { type: Boolean, default: true },
+    rewardNotifications: { type: Boolean, default: true }
+  },
   language: { type: String },
   subscription: {
     type: { type: String }, // e.g., "basic", "premium"
