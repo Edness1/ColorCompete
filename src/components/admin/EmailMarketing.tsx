@@ -35,13 +35,31 @@ export function EmailMarketing() {
     try {
       const response = await fetch(API_URL+'/api/email/analytics', {
         headers: {
-          'user-id': user?._id
+          'user-id': user?._id || ''
         }
       });
       
-      if (response.ok) {
-        const data = await response.json();
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error:', response.status, response.statusText, errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
+      
+      if (!responseText) {
+        console.warn('Empty response from server');
+        return;
+      }
+      
+      try {
+        const data = JSON.parse(responseText);
         setStats(data);
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        console.error('Response was:', responseText);
+        throw new Error('Server returned invalid JSON');
       }
     } catch (error) {
       console.error('Error fetching email stats:', error);

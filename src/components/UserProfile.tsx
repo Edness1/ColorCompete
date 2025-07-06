@@ -161,7 +161,7 @@ const UserProfile = ({
   const [activeTab, setActiveTab] = useState("submissions");
   const [isLoading, setIsLoading] = useState(false);
   const [profile, setProfile] = useState<any>(null);
-  const [userSubmissions, setUserSubmissions] = useState(initialSubmissions);
+  const [userSubmissions, setUserSubmissions] = useState<Submission[]>([]);
   const [userAchievements, setUserAchievements] = useState(initialAchievements);
   const [apiProfile, setApiProfile] = useState<any>(null);
 
@@ -209,20 +209,50 @@ const UserProfile = ({
           if (!res.ok) throw new Error("Failed to fetch submissions");
           const data = await res.json();
           if (data && data.length > 0) {
-            setUserSubmissions(
-              data.map((sub: any) => ({
-                id: sub.id,
-                title: sub.title || "Untitled Submission",
-                imageUrl: sub.file_path || sub.file_path,
-                date: new Date(sub.created_at || sub.date).toLocaleDateString(),
-                votes: sub.votes || 0,
-                contestId: sub.contest_id || sub.contestId,
-                contestName: sub.contest_type || sub.contestName || "Daily Contest",
-              })),
+            // Filter to ensure only submissions authored by the current user
+            const userSubmissionsOnly = data.filter((sub: any) => 
+              sub.user_id === user._id || sub.userId === user._id || sub.author_id === user._id
             );
+            
+            // Process submissions and fetch challenge titles
+            const submissionsWithTitles = await Promise.all(
+              userSubmissionsOnly.map(async (sub: any) => {
+                let challengeTitle = "Daily Contest";
+                
+                // If we have a challenge_id, fetch the challenge details
+                if (sub.challenge_id) {
+                  try {
+                    const challengeRes = await fetch(`${API_URL}/api/challenges/${sub.challenge_id}`);
+                    if (challengeRes.ok) {
+                      const challengeData = await challengeRes.json();
+                      challengeTitle = challengeData.title || challengeData.name || "Daily Contest";
+                    }
+                  } catch (challengeError) {
+                    console.error("Error fetching challenge details:", challengeError);
+                  }
+                }
+
+                return {
+                  id: sub.id,
+                  title: challengeTitle,
+                  imageUrl: sub.file_path || sub.file_path,
+                  date: new Date(sub.created_at || sub.date).toLocaleDateString(),
+                  votes: Array.isArray(sub.votes) ? sub.votes.length : (sub.votes || 0),
+                  contestId: sub.contest_id || sub.contestId || sub.challenge_id,
+                  contestName: challengeTitle,
+                };
+              })
+            );
+            
+            setUserSubmissions(submissionsWithTitles);
+          } else {
+            // If no submissions found, set empty array
+            setUserSubmissions([]);
           }
         } catch (error) {
           console.error("Error fetching submissions:", error);
+          // On error, set empty array to avoid showing demo data
+          setUserSubmissions([]);
         }
       };
 
@@ -252,7 +282,8 @@ const UserProfile = ({
       })
     : initialJoinDate;
   const bio = apiProfile?.bio || profile?.bio || initialBio;
-  const submissions = userSubmissions;
+  // Only show user's actual submissions, not demo data
+  const submissions = user ? userSubmissions : [];
   const achievements = userAchievements;
 
   // Use real stats from the database if available, otherwise fall back to the props
@@ -405,31 +436,48 @@ const UserProfile = ({
         <TabsContent value="submissions" className="space-y-4">
           <h2 className="text-xl font-semibold mb-4">Your Submissions</h2>
           <ScrollArea className="h-[500px] pr-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {submissions.map((submission) => (
-                <Card key={submission.id} className="overflow-hidden">
-                  <div className="aspect-square relative overflow-hidden bg-muted">
-                    <img
-                      src={submission.imageUrl}
-                      alt={submission.title}
-                      className="object-cover w-full h-full transition-transform hover:scale-105"
-                    />
-                  </div>
-                  <CardHeader className="p-4">
-                    <CardTitle className="text-lg">
-                      {submission.title}
-                    </CardTitle>
-                    <CardDescription>{submission.contestName}</CardDescription>
-                  </CardHeader>
-                  <CardFooter className="p-4 pt-0 flex justify-between">
-                    <span className="text-sm text-muted-foreground">
-                      {submission.date}
-                    </span>
-                    <Badge>{submission.votes.length} votes</Badge>
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
+            {submissions.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {submissions.map((submission) => (
+                  <Card key={submission.id} className="overflow-hidden">
+                    <div className="aspect-square relative overflow-hidden bg-muted">
+                      <img
+                        src={submission.imageUrl}
+                        alt={submission.title}
+                        className="object-cover w-full h-full transition-transform hover:scale-105"
+                      />
+                    </div>
+                    <CardHeader className="p-4">
+                      <CardTitle className="text-lg">
+                        {submission.title}
+                      </CardTitle>
+                      <CardDescription>{submission.contestName}</CardDescription>
+                    </CardHeader>
+                    <CardFooter className="p-4 pt-0 flex justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        {submission.date}
+                      </span>
+                      <Badge>{submission.votes} votes</Badge>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-[300px] text-center">
+                <ImageIcon className="h-16 w-16 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No submissions yet</h3>
+                <p className="text-muted-foreground mb-4">
+                  {user 
+                    ? "You haven't submitted any artwork yet. Join a contest to get started!" 
+                    : "Please log in to view your submissions."}
+                </p>
+                {user && (
+                  <Link to="/">
+                    <Button>Join Today's Contest</Button>
+                  </Link>
+                )}
+              </div>
+            )}
           </ScrollArea>
         </TabsContent>
 
@@ -442,7 +490,7 @@ const UserProfile = ({
               <CardContent className="pt-6">
                 <div className="flex flex-col items-center text-center">
                   <div className="bg-primary/10 p-3 rounded-full mb-2">
-                    <Image as ImageIcon className="h-5 w-5 text-primary" />
+                    <ImageIcon className="h-5 w-5 text-primary" />
                   </div>
                   <div className="text-2xl font-bold">
                     {userStats.totalSubmissions}

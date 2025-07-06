@@ -18,7 +18,7 @@ interface EmailAutomation {
   name: string;
   description?: string;
   isActive: boolean;
-  triggerType: 'daily_winner' | 'monthly_winner' | 'winner_reward' | 'welcome' | 'subscription_expired';
+  triggerType: 'daily_winner' | 'monthly_winner' | 'winner_reward' | 'welcome' | 'subscription_expired' | 'contest_announcement' | 'voting_results' | 'comments_feedback' | 'weekly_summary';
   emailTemplate: {
     subject: string;
     htmlContent: string;
@@ -27,6 +27,7 @@ interface EmailAutomation {
   schedule?: {
     time: string;
     dayOfMonth?: number;
+    dayOfWeek?: number;
     timezone: string;
   };
   rewardSettings?: {
@@ -44,10 +45,29 @@ export function EmailAutomationManager() {
   const [loading, setLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingAutomation, setEditingAutomation] = useState<EmailAutomation | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    triggerType: 'daily_winner' | 'monthly_winner' | 'winner_reward' | 'welcome' | 'subscription_expired' | 'contest_announcement' | 'voting_results' | 'comments_feedback' | 'weekly_summary';
+    emailTemplate: {
+      subject: string;
+      htmlContent: string;
+      textContent: string;
+    };
+    schedule: {
+      time: string;
+      dayOfMonth: number;
+      dayOfWeek?: number;
+      timezone: string;
+    };
+    rewardSettings: {
+      giftCardAmount: number;
+      giftCardMessage: string;
+    };
+  }>({
     name: '',
     description: '',
-    triggerType: 'daily_winner' as 'daily_winner' | 'monthly_winner' | 'winner_reward' | 'welcome' | 'subscription_expired',
+    triggerType: 'daily_winner' as 'daily_winner' | 'monthly_winner' | 'winner_reward' | 'welcome' | 'subscription_expired' | 'contest_announcement' | 'voting_results' | 'comments_feedback' | 'weekly_summary',
     emailTemplate: {
       subject: '',
       htmlContent: '',
@@ -164,6 +184,7 @@ export function EmailAutomationManager() {
       schedule: {
         time: '09:00',
         dayOfMonth: 1,
+        dayOfWeek: 1,
         timezone: 'America/New_York'
       },
       rewardSettings: {
@@ -186,6 +207,7 @@ export function EmailAutomationManager() {
       schedule: {
         time: automation.schedule?.time || '09:00',
         dayOfMonth: automation.schedule?.dayOfMonth || 1,
+        dayOfWeek: automation.schedule?.dayOfWeek || 1,
         timezone: automation.schedule?.timezone || 'America/New_York'
       },
       rewardSettings: automation.rewardSettings || {
@@ -203,7 +225,11 @@ export function EmailAutomationManager() {
       monthly_winner: 'Monthly Winner Announcement',
       winner_reward: 'Winner Gift Card Reward',
       welcome: 'Welcome Email',
-      subscription_expired: 'Subscription Expired'
+      subscription_expired: 'Subscription Expired',
+      contest_announcement: 'Contest Announcements',
+      voting_results: 'Voting Results',
+      comments_feedback: 'Comments & Feedback',
+      weekly_summary: 'Weekly Summary'
     };
     return labels[type] || type;
   };
@@ -214,7 +240,11 @@ export function EmailAutomationManager() {
       monthly_winner: <TrendingUp className="w-4 h-4" />,
       winner_reward: <Gift className="w-4 h-4" />,
       welcome: <Mail className="w-4 h-4" />,
-      subscription_expired: <Clock className="w-4 h-4" />
+      subscription_expired: <Clock className="w-4 h-4" />,
+      contest_announcement: <Plus className="w-4 h-4" />,
+      voting_results: <TrendingUp className="w-4 h-4" />,
+      comments_feedback: <Mail className="w-4 h-4" />,
+      weekly_summary: <Calendar className="w-4 h-4" />
     };
     return icons[type] || <Settings className="w-4 h-4" />;
   };
@@ -244,6 +274,56 @@ export function EmailAutomationManager() {
 <h2>{{challenge_title}}</h2>
 <img src="{{submission_image}}" alt="Your winning submission" style="max-width: 400px;" />
 <p>Your gift card has been sent to your email. Check your inbox!</p>`
+      },
+      contest_announcement: {
+        subject: '🎨 New Contest Alert: {{challenge_title}}',
+        htmlContent: `<h1>🎨 New ColorCompete Contest!</h1>
+<p>A fresh contest is now live and waiting for your creativity!</p>
+<h2>{{challenge_title}}</h2>
+<p>{{challenge_description}}</p>
+<p><strong>Contest ends:</strong> {{end_date}}</p>
+<p><strong>Prize:</strong> {{prize_amount}}</p>
+<a href="{{contest_url}}" style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Join Contest</a>`
+      },
+      voting_results: {
+        subject: '📊 Voting Complete: {{challenge_title}} Results',
+        htmlContent: `<h1>📊 Contest Results Are In!</h1>
+<p>The voting has ended for <strong>{{challenge_title}}</strong>!</p>
+<h2>🥇 Winner: {{winner_name}}</h2>
+<img src="{{winning_submission}}" alt="Winning submission" style="max-width: 400px;" />
+<p><strong>Total votes:</strong> {{total_votes}}</p>
+<p>Thank you to everyone who participated and voted!</p>
+<a href="{{results_url}}" style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Full Results</a>`
+      },
+      comments_feedback: {
+        subject: '💬 New Comment on Your Submission: {{challenge_title}}',
+        htmlContent: `<h1>💬 You've Got Feedback!</h1>
+<p>Someone left a comment on your submission for <strong>{{challenge_title}}</strong>!</p>
+<div style="background: #f8f9fa; padding: 16px; border-left: 4px solid #007bff; margin: 16px 0;">
+  <p><strong>{{commenter_name}}</strong> said:</p>
+  <p style="font-style: italic;">"{{comment_text}}"</p>
+</div>
+<img src="{{submission_image}}" alt="Your submission" style="max-width: 400px;" />
+<a href="{{submission_url}}" style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Submission</a>`
+      },
+      weekly_summary: {
+        subject: '📈 Your Weekly ColorCompete Summary',
+        htmlContent: `<h1>📈 Your Week in ColorCompete</h1>
+<p>Here's what happened in your creative journey this week:</p>
+<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 16px 0;">
+  <h3>Your Stats</h3>
+  <p>🎨 <strong>{{submissions_count}}</strong> submissions created</p>
+  <p>👍 <strong>{{votes_received}}</strong> votes received</p>
+  <p>💬 <strong>{{comments_received}}</strong> comments received</p>
+  <p>🏆 <strong>{{contests_won}}</strong> contests won</p>
+</div>
+<div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin: 16px 0;">
+  <h3>This Week's Highlights</h3>
+  <p>🎯 <strong>{{active_contests}}</strong> active contests</p>
+  <p>👥 <strong>{{new_members}}</strong> new community members</p>
+  <p>🎨 <strong>{{total_submissions}}</strong> total submissions this week</p>
+</div>
+<a href="{{dashboard_url}}" style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Dashboard</a>`
       }
     };
     return templates[triggerType] || { subject: '', htmlContent: '' };
@@ -324,12 +404,16 @@ export function EmailAutomationManager() {
                       <SelectItem value="daily_winner">Daily Winner Announcement</SelectItem>
                       <SelectItem value="monthly_winner">Monthly Winner Announcement</SelectItem>
                       <SelectItem value="winner_reward">Winner Gift Card Reward</SelectItem>
+                      <SelectItem value="contest_announcement">Contest Announcements</SelectItem>
+                      <SelectItem value="voting_results">Voting Results</SelectItem>
+                      <SelectItem value="comments_feedback">Comments & Feedback</SelectItem>
+                      <SelectItem value="weekly_summary">Weekly Summary</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {/* Schedule Settings */}
-                {(formData.triggerType === 'daily_winner' || formData.triggerType === 'monthly_winner') && (
+                {(formData.triggerType === 'daily_winner' || formData.triggerType === 'monthly_winner' || formData.triggerType === 'weekly_summary') && (
                   <div className="grid gap-4 p-4 border rounded-lg">
                     <h3 className="font-medium">Schedule Settings</h3>
                     
@@ -360,6 +444,32 @@ export function EmailAutomationManager() {
                             schedule: { ...formData.schedule, dayOfMonth: parseInt(e.target.value) }
                           })}
                         />
+                      </div>
+                    )}
+                    
+                    {formData.triggerType === 'weekly_summary' && (
+                      <div className="grid gap-2">
+                        <Label htmlFor="dayOfWeek">Day of Week</Label>
+                        <Select 
+                          value={formData.schedule.dayOfWeek?.toString() || '1'}
+                          onValueChange={(value) => setFormData({
+                            ...formData,
+                            schedule: { ...formData.schedule, dayOfWeek: parseInt(value) }
+                          })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">Monday</SelectItem>
+                            <SelectItem value="2">Tuesday</SelectItem>
+                            <SelectItem value="3">Wednesday</SelectItem>
+                            <SelectItem value="4">Thursday</SelectItem>
+                            <SelectItem value="5">Friday</SelectItem>
+                            <SelectItem value="6">Saturday</SelectItem>
+                            <SelectItem value="0">Sunday</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     )}
                     
@@ -569,6 +679,8 @@ export function EmailAutomationManager() {
                       <span className="font-medium">
                         {automation.triggerType === 'monthly_winner' 
                           ? `${automation.schedule.dayOfMonth}th at ${automation.schedule.time}`
+                          : automation.triggerType === 'weekly_summary'
+                          ? `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][automation.schedule.dayOfWeek || 1]} at ${automation.schedule.time}`
                           : `Daily at ${automation.schedule.time}`
                         }
                       </span>
