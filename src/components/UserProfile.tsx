@@ -43,6 +43,8 @@ import {
   Lock,
   Trash2,
   Download,
+  Star,
+  Crown,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -68,6 +70,8 @@ interface Achievement {
   description: string;
   date: string;
   type: "win" | "participation" | "milestone";
+  icon?: string;
+  iconColor?: string;
 }
 
 interface UserProfileProps {
@@ -162,7 +166,7 @@ const UserProfile = ({
   const [isLoading, setIsLoading] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [userSubmissions, setUserSubmissions] = useState<Submission[]>([]);
-  const [userAchievements, setUserAchievements] = useState(initialAchievements);
+  const [userAchievements, setUserAchievements] = useState<Achievement[]>([]);
   const [apiProfile, setApiProfile] = useState<any>(null);
 
   // Fetch user profile data from your API (not Supabase)
@@ -180,7 +184,34 @@ const UserProfile = ({
       }
     };
 
+    const fetchUserBadges = async () => {
+      if (!user?._id) return;
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || "";
+        const res = await fetch(`${API_URL}/api/badges/user/${user._id}`);
+        if (!res.ok) throw new Error("Failed to fetch user badges");
+        const badges = await res.json();
+        
+        // Convert badges to achievement format
+        const achievements = badges.map((badge: any) => ({
+          id: badge.id,
+          title: badge.name,
+          description: badge.description,
+          date: new Date(badge.earnedAt).toLocaleDateString(),
+          type: badge.type === "win" ? "win" : badge.type === "milestone" ? "milestone" : "participation",
+          icon: badge.icon,
+          iconColor: badge.iconColor
+        }));
+        
+        setUserAchievements(achievements);
+      } catch (error) {
+        console.error("Error fetching user badges:", error);
+        setUserAchievements([]); // Set empty if error
+      }
+    };
+
     fetchApiProfile();
+    fetchUserBadges();
   }, [user]);
 
   // Fetch user profile data from Supabase (replace with API)
@@ -284,7 +315,29 @@ const UserProfile = ({
   const bio = apiProfile?.bio || profile?.bio || initialBio;
   // Only show user's actual submissions, not demo data
   const submissions = user ? userSubmissions : [];
-  const achievements = userAchievements;
+  const achievements = user ? userAchievements : [];
+
+  // Function to render the correct icon for badges
+  const renderBadgeIcon = (iconName: string, iconColor: string) => {
+    const iconClass = `h-8 w-8 ${iconColor}`;
+    
+    switch (iconName) {
+      case 'Medal':
+        return <Medal className={iconClass} />;
+      case 'Trophy':
+        return <Trophy className={iconClass} />;
+      case 'Star':
+        return <Star className={iconClass} />;
+      case 'Award':
+        return <Award className={iconClass} />;
+      case 'Crown':
+        return <Crown className={iconClass} />;
+      case 'Sparkles':
+        return <Sparkles className={iconClass} />;
+      default:
+        return <Medal className={iconClass} />;
+    }
+  };
 
   // Use real stats from the database if available, otherwise fall back to the props
   const winCount = user
@@ -549,32 +602,52 @@ const UserProfile = ({
 
           <ScrollArea className="h-[400px]">
             <div className="space-y-4">
-              {achievements.map((achievement) => (
-                <Card key={achievement.id}>
-                  <CardHeader className="flex flex-row items-center gap-4">
-                    {achievement.type === "win" ? (
-                      <Trophy className="h-8 w-8 text-yellow-500" />
-                    ) : achievement.type === "milestone" ? (
-                      <Medal className="h-8 w-8 text-blue-500" />
-                    ) : (
-                      <Badge className="h-8 w-8 flex items-center justify-center text-green-500">
-                        P
-                      </Badge>
-                    )}
-                    <div>
-                      <CardTitle>{achievement.title}</CardTitle>
-                      <CardDescription>
-                        {achievement.description}
-                      </CardDescription>
-                    </div>
-                  </CardHeader>
-                  <CardFooter>
-                    <span className="text-sm text-muted-foreground">
-                      {achievement.date}
-                    </span>
-                  </CardFooter>
-                </Card>
-              ))}
+              {achievements.length > 0 ? (
+                achievements.map((achievement) => (
+                  <Card key={achievement.id}>
+                    <CardHeader className="flex flex-row items-center gap-4">
+                      {achievement.icon && achievement.iconColor 
+                        ? renderBadgeIcon(achievement.icon, achievement.iconColor)
+                        : achievement.type === "win" ? (
+                          <Trophy className="h-8 w-8 text-yellow-500" />
+                        ) : achievement.type === "milestone" ? (
+                          <Medal className="h-8 w-8 text-blue-500" />
+                        ) : (
+                          <Badge className="h-8 w-8 flex items-center justify-center text-green-500">
+                            P
+                          </Badge>
+                        )
+                      }
+                      <div>
+                        <CardTitle>{achievement.title}</CardTitle>
+                        <CardDescription>
+                          {achievement.description}
+                        </CardDescription>
+                      </div>
+                    </CardHeader>
+                    <CardFooter>
+                      <span className="text-sm text-muted-foreground">
+                        {achievement.date}
+                      </span>
+                    </CardFooter>
+                  </Card>
+                ))
+              ) : (
+                <div className="flex flex-col items-center justify-center h-[300px] text-center">
+                  <Trophy className="h-16 w-16 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No achievements yet</h3>
+                  <p className="text-muted-foreground mb-4">
+                    {user 
+                      ? "Start participating in contests to earn digital achievement badges!" 
+                      : "Please log in to view your achievements."}
+                  </p>
+                  {user && (
+                    <Link to="/">
+                      <Button>Join Today's Contest</Button>
+                    </Link>
+                  )}
+                </div>
+              )}
             </div>
           </ScrollArea>
         </TabsContent>
@@ -1044,7 +1117,9 @@ const UserProfile = ({
                     <div className="text-xl font-semibold">
                       {tier === "free"
                         ? "$0"
-                        : tier === "pro"
+                        : tier === "lite"
+                          ? "$4.99"
+                          : tier === "pro"
                           ? "$9.99"
                           : "$19.99"}
                     </div>
@@ -1097,7 +1172,7 @@ const UserProfile = ({
                     </CardFooter>
                   </Card>
 
-                  <Card className={tier === "premium" ? "border-primary" : ""}>
+                  <Card className={tier === "champ" ? "border-primary" : ""}>
                     <CardHeader className="text-center">
                       <CardTitle className="text-lg">Premium</CardTitle>
                       <CardDescription>$19.99/month</CardDescription>
@@ -1109,11 +1184,11 @@ const UserProfile = ({
                     </CardContent>
                     <CardFooter>
                       <Button
-                        variant={tier === "premium" ? "default" : "outline"}
+                        variant={tier === "champ" ? "default" : "outline"}
                         className="w-full"
-                        disabled={tier === "premium"}
+                        disabled={tier === "champ"}
                       >
-                        {tier === "premium" ? "Current Plan" : "Upgrade"}
+                        {tier === "champ" ? "Current Plan" : "Upgrade"}
                       </Button>
                     </CardFooter>
                   </Card>

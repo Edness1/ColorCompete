@@ -23,7 +23,7 @@ const UserSchema = new mongoose.Schema({
     type: { type: String }, // e.g., "basic", "premium"
     id: { type: String } // Stripe subscription ID
   },
-  badge: { type: mongoose.Schema.Types.ObjectId, ref: 'Badge' },
+  badges: [{ type: mongoose.Schema.Types.ObjectId, ref: 'UserBadge' }], // Array of user badges
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
   isAdmin: { type: Boolean, default: false }

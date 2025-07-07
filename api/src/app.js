@@ -12,6 +12,7 @@ const dbConfig = require('./config/db');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
 const emailAutomationService = require('./services/emailAutomationService');
+const BadgeService = require('./services/badgeService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,6 +24,16 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // Database connection
 dbConfig();
+
+// Initialize badges after database connection
+setTimeout(async () => {
+  try {
+    await BadgeService.initializeDefaultBadges();
+    console.log('Default badges initialized');
+  } catch (error) {
+    console.error('Error initializing badges:', error);
+  }
+}, 2000); // Wait 2 seconds for DB connection
 
 // Routes
 app.use('/api/challenges', challengeRoutes);

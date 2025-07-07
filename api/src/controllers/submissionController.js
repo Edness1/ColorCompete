@@ -1,10 +1,25 @@
 const Submission = require('../models/Submission');
+const BadgeService = require('../services/badgeService');
 
 // Create a new submission
 exports.createSubmission = async (req, res) => {
   try {
     const submission = new Submission(req.body);
     await submission.save();
+    
+    // Check and award badges after submission
+    if (submission.user_id) {
+      try {
+        await BadgeService.checkAndAwardBadges(submission.user_id, 'submission', {
+          submissionId: submission._id,
+          contestId: submission.challenge_id
+        });
+      } catch (badgeError) {
+        console.error('Error checking badges after submission:', badgeError);
+        // Don't fail the submission if badge checking fails
+      }
+    }
+    
     res.status(201).json(submission);
   } catch (error) {
     res.status(400).json({ message: error.message });
