@@ -8,6 +8,7 @@ const submissionRoutes = require('./routes/submissionRoutes');
 const userRoutes = require('./routes/userRoutes');
 const badgeRoutes = require('./routes/badgeRoutes');
 const emailRoutes = require('./routes/emailRoutes');
+const monthlyDrawingRoutes = require('./routes/monthlyDrawing');
 const dbConfig = require('./config/db');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
@@ -43,6 +44,7 @@ app.use('/api/badges', badgeRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/email', emailRoutes);
+app.use('/api/monthly-drawings', monthlyDrawingRoutes);
 
 // Start the server
 app.listen(PORT, () => {

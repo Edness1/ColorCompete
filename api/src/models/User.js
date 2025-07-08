@@ -19,10 +19,6 @@ const UserSchema = new mongoose.Schema({
     rewardNotifications: { type: Boolean, default: true }
   },
   language: { type: String },
-  subscription: {
-    type: { type: String }, // e.g., "basic", "premium"
-    id: { type: String } // Stripe subscription ID
-  },
   badges: [{ type: mongoose.Schema.Types.ObjectId, ref: 'UserBadge' }], // Array of user badges
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },

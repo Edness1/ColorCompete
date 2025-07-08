@@ -1,9 +1,12 @@
 const cron = require('node-cron');
 const EmailAutomation = require('../models/EmailAutomation');
 const User = require('../models/User');
+const Subscription = require('../models/Subscription');
 const Submission = require('../models/Submission');
 const Challenge = require('../models/Challenge');
+const MonthlyDrawing = require('../models/MonthlyDrawing');
 const emailService = require('./emailService');
+const tremendousService = require('./tremendousService');
 
 class EmailAutomationService {
   constructor() {
@@ -33,40 +36,86 @@ class EmailAutomationService {
       this.scheduledJobs.get(jobKey).destroy();
     }
 
+    // Validate schedule data
+    if (!automation.schedule) {
+      console.log(`No schedule data for automation: ${automation.name}`);
+      return;
+    }
+
     let cronExpression;
     
     switch (automation.triggerType) {
-      case 'daily_winner':
-        // Run daily at specified time
-        const [hour, minute] = automation.schedule.time.split(':');
-        cronExpression = `${minute} ${hour} * * *`;
+      case 'contest_announcement':
+        // Event-triggered, no cron schedule needed
+        console.log(`Contest announcement automation: ${automation.name} - event triggered`);
         break;
-      case 'monthly_winner':
-        // Run on specified day of month at specified time
-        const [mHour, mMinute] = automation.schedule.time.split(':');
-        cronExpression = `${mMinute} ${mHour} ${automation.schedule.dayOfMonth} * *`;
+      case 'voting_results':
+        // Run daily at specified time
+        if (!automation.schedule.time) {
+          console.error(`Missing schedule time for voting_results automation: ${automation.name}`);
+          return;
+        }
+        try {
+          const [hour, minute] = automation.schedule.time.split(':');
+          cronExpression = `${minute} ${hour} * * *`;
+        } catch (error) {
+          console.error(`Invalid time format for automation ${automation.name}:`, automation.schedule.time);
+          return;
+        }
         break;
       case 'weekly_summary':
-        // Run weekly on Monday at specified time
-        const [wHour, wMinute] = automation.schedule.time.split(':');
-        cronExpression = `${wMinute} ${wHour} * * 1`; // Monday = 1
+        // Run weekly on specified day at specified time
+        if (!automation.schedule.time) {
+          console.error(`Missing schedule time for weekly_summary automation: ${automation.name}`);
+          return;
+        }
+        try {
+          const [wHour, wMinute] = automation.schedule.time.split(':');
+          const dayOfWeek = automation.schedule.dayOfWeek || 0; // Default to Sunday
+          cronExpression = `${wMinute} ${wHour} * * ${dayOfWeek}`;
+        } catch (error) {
+          console.error(`Invalid time format for automation ${automation.name}:`, automation.schedule.time);
+          return;
+        }
+        break;
+      case 'monthly_drawing_lite':
+      case 'monthly_drawing_pro':
+      case 'monthly_drawing_champ':
+        // Run monthly on specified day at specified time
+        if (!automation.schedule.time || !automation.monthlyDrawingSettings?.drawingDate) {
+          console.error(`Missing schedule time or drawing date for monthly drawing automation: ${automation.name}`);
+          return;
+        }
+        try {
+          const [mHour, mMinute] = automation.schedule.time.split(':');
+          const dayOfMonth = automation.monthlyDrawingSettings.drawingDate;
+          cronExpression = `${mMinute} ${mHour} ${dayOfMonth} * *`;
+        } catch (error) {
+          console.error(`Invalid time format for automation ${automation.name}:`, automation.schedule.time);
+          return;
+        }
         break;
       default:
+        console.log(`Unknown or event-based automation type: ${automation.triggerType}`);
         return; // Event-based automations don't need cron jobs
     }
 
     if (cronExpression) {
-      const job = cron.schedule(cronExpression, () => {
-        this.executeAutomation(automation);
-      }, {
-        scheduled: false,
-        timezone: automation.schedule.timezone
-      });
+      try {
+        const job = cron.schedule(cronExpression, () => {
+          this.executeAutomation(automation);
+        }, {
+          scheduled: false,
+          timezone: automation.schedule.timezone || 'America/New_York'
+        });
 
-      job.start();
-      this.scheduledJobs.set(jobKey, job);
-      
-      console.log(`Scheduled automation: ${automation.name} with cron: ${cronExpression}`);
+        job.start();
+        this.scheduledJobs.set(jobKey, job);
+        
+        console.log(`Scheduled automation: ${automation.name} with cron: ${cronExpression} (timezone: ${automation.schedule.timezone || 'America/New_York'})`);
+      } catch (error) {
+        console.error(`Failed to schedule automation ${automation.name}:`, error);
+      }
     }
   }
 
@@ -74,18 +123,29 @@ class EmailAutomationService {
     try {
       console.log(`Executing automation: ${automation.name}`);
       
-      switch (automation.triggerType) {      case 'daily_winner':
-        await this.sendDailyWinnerEmail(automation);
-        break;
-      case 'monthly_winner':
-        await this.sendMonthlyWinnerEmail(automation);
-        break;
-      case 'weekly_summary':
-        await this.sendWeeklySummaryEmail(automation);
-        break;
-      default:
-        console.log(`Unknown automation trigger type: ${automation.triggerType}`);
-    }
+      switch (automation.triggerType) {
+        case 'contest_announcement':
+          await this.sendContestAnnouncementEmail(automation);
+          break;
+        case 'voting_results':
+          await this.sendVotingResultsEmail(automation);
+          break;
+        case 'weekly_summary':
+          await this.sendWeeklySummaryEmail(automation);
+          break;
+        case 'monthly_drawing_lite':
+          await this.runMonthlyDrawing(automation, 'lite');
+          break;
+        case 'monthly_drawing_pro':
+          await this.runMonthlyDrawing(automation, 'pro');
+          break;
+        case 'monthly_drawing_champ':
+          await this.runMonthlyDrawing(automation, 'champ');
+          break;
+        default:
+          console.error(`Unknown automation type: ${automation.triggerType}`);
+          return;
+      }
 
       // Update last triggered time
       automation.lastTriggered = new Date();
@@ -93,122 +153,6 @@ class EmailAutomationService {
       
     } catch (error) {
       console.error(`Error executing automation ${automation.name}:`, error);
-    }
-  }
-
-  async sendDailyWinnerEmail(automation) {
-    try {
-      // Get yesterday's winner
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      yesterday.setHours(0, 0, 0, 0);
-      
-      const endOfYesterday = new Date(yesterday);
-      endOfYesterday.setHours(23, 59, 59, 999);
-
-      // Find the winning submission from yesterday
-      const winningSubmission = await Submission.findOne({
-        createdAt: { $gte: yesterday, $lte: endOfYesterday },
-        // Add your winning criteria here (highest votes, etc.)
-      }).populate('user').populate('challenge').sort({ votes: -1 });
-
-      if (!winningSubmission) {
-        console.log('No winning submission found for yesterday');
-        return;
-      }
-
-      // Get all active users
-      const users = await User.find({ 
-        email: { $exists: true, $ne: '' }
-      });
-
-      const subject = emailService.replaceTemplateVariables(automation.emailTemplate.subject, {
-        winner_name: winningSubmission.user.firstName,
-        date: yesterday.toLocaleDateString()
-      });
-
-      const htmlContent = emailService.replaceTemplateVariables(automation.emailTemplate.htmlContent, {
-        winner_name: winningSubmission.user.firstName,
-        winner_username: winningSubmission.user.username,
-        challenge_title: winningSubmission.challenge.title,
-        submission_image: winningSubmission.imageUrl,
-        date: yesterday.toLocaleDateString()
-      });
-
-      // Send emails to all users
-      for (const user of users) {
-        await emailService.sendEmail({
-          to: { userId: user._id, email: user.email },
-          subject,
-          htmlContent,
-          automationId: automation._id
-        });
-        
-        automation.totalSent += 1;
-      }
-
-      await automation.save();
-      console.log(`Sent daily winner emails to ${users.length} users`);
-      
-    } catch (error) {
-      console.error('Error sending daily winner email:', error);
-    }
-  }
-
-  async sendMonthlyWinnerEmail(automation) {
-    try {
-      // Get last month's date range
-      const lastMonth = new Date();
-      lastMonth.setMonth(lastMonth.getMonth() - 1);
-      
-      const startOfMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
-      const endOfMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0, 23, 59, 59, 999);
-
-      // Find the winning submission from last month
-      const winningSubmission = await Submission.findOne({
-        createdAt: { $gte: startOfMonth, $lte: endOfMonth }
-      }).populate('user').populate('challenge').sort({ votes: -1 });
-
-      if (!winningSubmission) {
-        console.log('No winning submission found for last month');
-        return;
-      }
-
-      // Get all active users
-      const users = await User.find({ 
-        email: { $exists: true, $ne: '' }
-      });
-
-      const subject = emailService.replaceTemplateVariables(automation.emailTemplate.subject, {
-        winner_name: winningSubmission.user.firstName,
-        month: lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-      });
-
-      const htmlContent = emailService.replaceTemplateVariables(automation.emailTemplate.htmlContent, {
-        winner_name: winningSubmission.user.firstName,
-        winner_username: winningSubmission.user.username,
-        challenge_title: winningSubmission.challenge.title,
-        submission_image: winningSubmission.imageUrl,
-        month: lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-      });
-
-      // Send emails to all users
-      for (const user of users) {
-        await emailService.sendEmail({
-          to: { userId: user._id, email: user.email },
-          subject,
-          htmlContent,
-          automationId: automation._id
-        });
-        
-        automation.totalSent += 1;
-      }
-
-      await automation.save();
-      console.log(`Sent monthly winner emails to ${users.length} users`);
-      
-    } catch (error) {
-      console.error('Error sending monthly winner email:', error);
     }
   }
 
@@ -231,37 +175,40 @@ class EmailAutomationService {
           createdAt: { $gte: lastWeek, $lte: today }
         }).populate('challenge');
 
-        // Get votes received on user's submissions
-        const votesReceived = userSubmissions.reduce((total, submission) => total + (submission.votes || 0), 0);
+        // Get user's wins this week (submissions that won contests)
+        const userWins = await Submission.find({
+          user: user._id,
+          createdAt: { $gte: lastWeek, $lte: today },
+          isWinner: true
+        }).countDocuments();
 
-        // Get comments received (this would need a Comment model)
-        const commentsReceived = 0; // Placeholder
-
-        // Get user's current ranking (placeholder)
-        const rankingPosition = Math.floor(Math.random() * 1000) + 1;
+        // Get all user's votes across all submissions (not just this week)
+        const allUserSubmissions = await Submission.find({ user: user._id });
+        const totalVotes = allUserSubmissions.reduce((total, submission) => total + (submission.votes || 0), 0);
 
         // Get platform stats
-        const newContestsCount = await Challenge.countDocuments({
-          createdAt: { $gte: lastWeek, $lte: today }
+        const activeContests = await Challenge.countDocuments({
+          isActive: true
         });
 
         const newMembersCount = await User.countDocuments({
           createdAt: { $gte: lastWeek, $lte: today }
         });
 
+        const totalSubmissionsThisWeek = await Submission.countDocuments({
+          createdAt: { $gte: lastWeek, $lte: today }
+        });
+
         const templateData = {
-          userName: user.firstName || user.username,
-          weekRange: `${lastWeek.toLocaleDateString()} - ${today.toLocaleDateString()}`,
-          submissionsThisWeek: userSubmissions.length,
-          votesReceived,
-          commentsReceived,
-          rankingPosition,
-          newContestsCount,
-          newMembersCount,
-          topPrizeThisWeek: '$100',
-          dashboardUrl: `${process.env.FRONTEND_URL}/dashboard`,
-          unsubscribeUrl: `${process.env.FRONTEND_URL}/unsubscribe?userId=${user._id}`,
-          websiteUrl: process.env.FRONTEND_URL
+          user_name: user.firstName || user.username,
+          user_submissions_count: userSubmissions.length,
+          user_wins_count: userWins,
+          user_total_votes: totalVotes,
+          active_contests: activeContests,
+          new_members: newMembersCount,
+          total_submissions: totalSubmissionsThisWeek,
+          dashboard_url: `${process.env.FRONTEND_URL}/dashboard`,
+          unsubscribeUrl: `${process.env.FRONTEND_URL}/unsubscribe?userId=${user._id}`
         };
 
         const subject = this.replaceTemplateVariables(automation.emailTemplate.subject, templateData);
@@ -560,6 +507,274 @@ class EmailAutomationService {
     } catch (error) {
       console.error('Error sending comment notification:', error);
     }
+  }
+
+  // Send contest announcement email (called by cron scheduler)
+  async sendContestAnnouncementEmail(automation) {
+    try {
+      // This method would be triggered by cron scheduler to announce new contests
+      // For now, just log since contests are announced when created via the other method
+      console.log('Contest announcement automation triggered - checking for new contests to announce');
+      
+      // Get contests created in the last day
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentContests = await Challenge.find({
+        createdAt: { $gte: yesterday },
+        isActive: true
+      });
+
+      for (const contest of recentContests) {
+        await this.sendContestAnnouncement({
+          _id: contest._id,
+          title: contest.title,
+          description: contest.description,
+          prize: contest.prize,
+          deadline: contest.endDate,
+          votingPeriod: contest.votingEndDate
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error in contest announcement email automation:', error);
+    }
+  }
+
+  // Send voting results email (called by cron scheduler)
+  async sendVotingResultsEmail(automation) {
+    try {
+      console.log('Voting results automation triggered - checking for contests with results to announce');
+      
+      // Get contests that ended in the last day and have winners
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const contestsWithResults = await Challenge.find({
+        votingEndDate: { $gte: yesterday, $lte: new Date() },
+        isActive: false, // Contest has ended
+        winners: { $exists: true, $ne: [] }
+      }).populate('winners.user');
+
+      for (const contest of contestsWithResults) {
+        if (contest.winners && contest.winners.length > 0) {
+          await this.sendVotingResults(contest, contest.winners);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error in voting results email automation:', error);
+    }
+  }
+
+  // Run monthly drawing for specified tier
+  async runMonthlyDrawing(automation, tier) {
+    try {
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1; // JavaScript months are 0-indexed
+      const currentYear = now.getFullYear();
+
+      console.log(`Running monthly drawing for ${tier} tier - ${currentMonth}/${currentYear}`);
+
+      // Check if drawing already exists for this month/year/tier
+      const existingDrawing = await MonthlyDrawing.findOne({
+        month: currentMonth,
+        year: currentYear,
+        subscriptionTier: tier,
+        isCompleted: true
+      });
+
+      if (existingDrawing) {
+        console.log(`Monthly drawing for ${tier} tier already completed for ${currentMonth}/${currentYear}`);
+        return;
+      }
+
+      // Get all active subscribers for this tier
+      // First get current active subscriptions for this tier and month/year
+      const activeSubscriptions = await Subscription.find({
+        tier: tier,
+        month: currentMonth,
+        year: currentYear,
+        remaining_submissions: { $gt: 0 } // Only include active subscriptions
+      });
+
+      if (activeSubscriptions.length === 0) {
+        console.log(`No active subscriptions found for ${tier} tier in ${currentMonth}/${currentYear}`);
+        return;
+      }
+
+      // Get user details for participants
+      const userIds = activeSubscriptions.map(sub => sub.userId);
+      const participants = await User.find({
+        _id: { $in: userIds },
+        email: { $exists: true, $ne: '' },
+        'emailPreferences.rewardNotifications': { $ne: false }
+      });
+
+      if (participants.length === 0) {
+        console.log(`No participants found for ${tier} tier monthly drawing`);
+        return;
+      }
+
+      // Select random winner
+      const randomIndex = Math.floor(Math.random() * participants.length);
+      const winner = participants[randomIndex];
+
+      // Determine prize amount based on tier
+      const prizeAmounts = { lite: 25, pro: 50, champ: 100 };
+      const prizeAmount = automation.monthlyDrawingSettings?.prizeAmount || prizeAmounts[tier];
+
+      // Create or update the monthly drawing record
+      let monthlyDrawing = await MonthlyDrawing.findOne({
+        month: currentMonth,
+        year: currentYear,
+        subscriptionTier: tier
+      });
+
+      if (!monthlyDrawing) {
+        monthlyDrawing = new MonthlyDrawing({
+          month: currentMonth,
+          year: currentYear,
+          subscriptionTier: tier,
+          prizeAmount,
+          drawingDate: now,
+          automationId: automation._id,
+          participants: participants.map(p => ({
+            userId: p._id,
+            email: p.email,
+            name: `${p.firstName} ${p.lastName}`
+          }))
+        });
+      }
+
+      // Set the winner
+      monthlyDrawing.winner = {
+        userId: winner._id,
+        email: winner.email,
+        name: `${winner.firstName} ${winner.lastName}`
+      };
+
+      // Send gift card via Tremendous
+      const giftCardResult = await tremendousService.sendGiftCard({
+        recipientEmail: winner.email,
+        recipientName: `${winner.firstName} ${winner.lastName}`,
+        amount: prizeAmount,
+        message: `Congratulations! You've won $${prizeAmount} in the ColorCompete ${tier.charAt(0).toUpperCase() + tier.slice(1)} monthly drawing!`
+      });
+
+      if (giftCardResult.success) {
+        // Update drawing with gift card details
+        monthlyDrawing.giftCardDetails = {
+          giftCardId: giftCardResult.giftCardId,
+          giftCardCode: giftCardResult.giftCardCode,
+          redeemUrl: giftCardResult.redeemUrl,
+          sentAt: new Date()
+        };
+        monthlyDrawing.isCompleted = true;
+
+        await monthlyDrawing.save();
+
+        // Send winner notification email
+        await this.sendMonthlyDrawingWinnerEmail(automation, winner, tier, prizeAmount, giftCardResult);
+
+        // Send participant notification emails (non-winners)
+        await this.sendMonthlyDrawingParticipantEmails(automation, participants, winner, tier, prizeAmount);
+
+        automation.totalSent += participants.length;
+        automation.lastTriggered = new Date();
+        await automation.save();
+
+        console.log(`Monthly drawing completed for ${tier} tier. Winner: ${winner.email}, Prize: $${prizeAmount}`);
+      } else {
+        console.error(`Failed to send gift card for ${tier} monthly drawing:`, giftCardResult.error);
+        monthlyDrawing.isCompleted = false;
+        await monthlyDrawing.save();
+      }
+
+    } catch (error) {
+      console.error(`Error running monthly drawing for ${tier} tier:`, error);
+    }
+  }
+
+  // Send winner notification email
+  async sendMonthlyDrawingWinnerEmail(automation, winner, tier, prizeAmount, giftCardResult) {
+    try {
+      const templateData = {
+        winner_name: winner.firstName || winner.username,
+        tier_name: tier.charAt(0).toUpperCase() + tier.slice(1),
+        prize_amount: prizeAmount,
+        gift_card_code: giftCardResult.giftCardCode,
+        redeem_url: giftCardResult.redeemUrl,
+        month_year: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        dashboard_url: `${process.env.FRONTEND_URL}/dashboard`,
+        unsubscribe_url: `${process.env.FRONTEND_URL}/unsubscribe?userId=${winner._id}`,
+        website_url: process.env.FRONTEND_URL
+      };
+
+      const subject = this.replaceTemplateVariables(automation.emailTemplate.subject, templateData);
+      const htmlContent = this.replaceTemplateVariables(automation.emailTemplate.htmlContent, templateData);
+
+      await emailService.sendEmail({
+        to: { userId: winner._id, email: winner.email },
+        subject,
+        htmlContent,
+        automationId: automation._id
+      });
+
+      console.log(`Sent monthly drawing winner email to ${winner.email}`);
+    } catch (error) {
+      console.error('Error sending monthly drawing winner email:', error);
+    }
+  }
+
+  // Send participant notification emails (for non-winners)
+  async sendMonthlyDrawingParticipantEmails(automation, participants, winner, tier, prizeAmount) {
+    try {
+      // Find automation for participant notifications (different template)
+      const participantAutomation = await EmailAutomation.findOne({
+        triggerType: `monthly_drawing_${tier}_participant`,
+        isActive: true
+      });
+
+      if (!participantAutomation) {
+        console.log(`No participant notification automation found for ${tier} tier`);
+        return;
+      }
+
+      const nonWinners = participants.filter(p => p._id.toString() !== winner._id.toString());
+      
+      for (const participant of nonWinners) {
+        const templateData = {
+          participant_name: participant.firstName || participant.username,
+          tier_name: tier.charAt(0).toUpperCase() + tier.slice(1),
+          winner_name: winner.firstName || winner.username,
+          prize_amount: prizeAmount,
+          month_year: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          total_participants: participants.length,
+          dashboard_url: `${process.env.FRONTEND_URL}/dashboard`,
+          unsubscribe_url: `${process.env.FRONTEND_URL}/unsubscribe?userId=${participant._id}`,
+          website_url: process.env.FRONTEND_URL
+        };
+
+        const subject = this.replaceTemplateVariables(participantAutomation.emailTemplate.subject, templateData);
+        const htmlContent = this.replaceTemplateVariables(participantAutomation.emailTemplate.htmlContent, templateData);
+
+        await emailService.sendEmail({
+          to: { userId: participant._id, email: participant.email },
+          subject,
+          htmlContent,
+          automationId: participantAutomation._id
+        });
+
+        // Add delay to respect rate limits
+        await this.delay(100);
+      }
+
+      console.log(`Sent monthly drawing participant emails to ${nonWinners.length} non-winners`);
+    } catch (error) {
+      console.error('Error sending monthly drawing participant emails:', error);
+    }
+  }
+
+  // Helper method to add delay
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   // Helper method to replace template variables

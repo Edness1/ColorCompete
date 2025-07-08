@@ -103,34 +103,6 @@ export function EmailAutomationManager() {
     e.preventDefault();
     
     try {
-      // Validate form data
-      if (!formData.name.trim()) {
-        alert('Please enter a name for the automation');
-        return;
-      }
-      
-      if (!formData.emailTemplate.subject.trim()) {
-        alert('Please enter an email subject');
-        return;
-      }
-      
-      if (!formData.emailTemplate.htmlContent.trim()) {
-        alert('Please enter email content');
-        return;
-      }
-
-      // Ensure schedule has proper time format
-      if ((formData.triggerType === 'voting_results' || formData.triggerType === 'weekly_summary') && 
-          (!formData.schedule.time || !/^\d{2}:\d{2}$/.test(formData.schedule.time))) {
-        alert('Please enter a valid time in HH:MM format');
-        return;
-      }
-
-      // Ensure weekly summary has dayOfWeek
-      if (formData.triggerType === 'weekly_summary' && formData.schedule.dayOfWeek === undefined) {
-        formData.schedule.dayOfWeek = 0; // Default to Sunday
-      }
-
       console.log('Submitting automation data:', formData);
       const url = editingAutomation 
         ? API_URL+`/api/email/automations/${editingAutomation._id}`
@@ -167,22 +139,6 @@ export function EmailAutomationManager() {
 
   const handleToggleAutomation = async (automation: EmailAutomation) => {
     try {
-      // If we're trying to activate an automation, validate it has proper schedule data
-      if (!automation.isActive) {
-        // Voting results and weekly summary need schedule times
-        if (automation.triggerType === 'voting_results' && 
-            (!automation.schedule?.time || !/^\d{2}:\d{2}$/.test(automation.schedule.time))) {
-          alert('This voting results automation cannot be activated because it has no scheduled time. Please edit it first.');
-          return;
-        }
-        if (automation.triggerType === 'weekly_summary' && 
-            (!automation.schedule?.time || !/^\d{2}:\d{2}$/.test(automation.schedule.time))) {
-          alert('This weekly summary automation cannot be activated because it has no scheduled time. Please edit it first.');
-          return;
-        }
-        // Contest announcements are event-triggered and don't need schedule times
-      }
-
       console.log('Toggling automation:', automation._id, 'Currently:', automation.isActive);
       const response = await fetch(API_URL+`/api/email/automations/${automation._id}/toggle`, {
         method: 'PATCH',
@@ -641,15 +597,11 @@ export function EmailAutomationManager() {
                       <br />
                       <span className="font-medium">
                         {automation.triggerType === 'weekly_summary'
-                          ? `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][automation.schedule.dayOfWeek || 0]} at ${automation.schedule.time || '10:00'}`
+                          ? `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][automation.schedule.dayOfWeek || 0]} at ${automation.schedule.time}`
                           : automation.triggerType === 'voting_results'
-                          ? automation.schedule.time 
-                            ? `Daily at ${automation.schedule.time} when winners announced`
-                            : 'Daily when winners announced (schedule incomplete)'
+                          ? `Daily at ${automation.schedule.time} when winners announced`
                           : automation.triggerType === 'contest_announcement'
-                          ? automation.schedule.time 
-                            ? `Daily at ${automation.schedule.time} for new contests`
-                            : 'Event-triggered for new contests'
+                          ? `Daily at ${automation.schedule.time} for new contests`
                           : 'Event-triggered'
                         }
                       </span>

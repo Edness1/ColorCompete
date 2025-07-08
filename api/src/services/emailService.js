@@ -1,6 +1,7 @@
 const sgMail = require('@sendgrid/mail');
 const axios = require('axios');
 const EmailLog = require('../models/EmailLog');
+const tremendousService = require('./tremendousService');
 
 // Initialize SendGrid
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -90,45 +91,12 @@ class EmailService {
   // Send gift card via Tremendous API
   async sendGiftCard({ recipientEmail, recipientName, amount, message, campaignId = null, automationId = null }) {
     try {
-      const tremendousConfig = {
-        headers: {
-          'Authorization': `Bearer ${process.env.TREMENDOUS_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      };
-
-      const giftCardData = {
-        external_id: `colorcompete_${Date.now()}`,
-        payment: {
-          funding_source_id: process.env.TREMENDOUS_FUNDING_SOURCE_ID
-        },
-        reward: {
-          value: {
-            denomination: amount,
-            currency_code: 'USD'
-          },
-          campaign_id: process.env.TREMENDOUS_CAMPAIGN_ID,
-          delivery: {
-            method: 'EMAIL',
-            recipient: {
-              email: recipientEmail,
-              name: recipientName
-            }
-          },
-          custom_fields: [
-            {
-              id: process.env.TREMENDOUS_MESSAGE_FIELD_ID,
-              value: message
-            }
-          ]
-        }
-      };
-
-      const response = await axios.post(
-        'https://testflight.tremendous.com/api/v2/orders',
-        giftCardData,
-        tremendousConfig
-      );
+      const result = await tremendousService.sendGiftCard({
+        recipientEmail,
+        recipientName,
+        amount,
+        message
+      });
 
       // Log the gift card delivery
       const emailLog = new EmailLog({
@@ -137,15 +105,30 @@ class EmailService {
         campaignId,
         automationId,
         subject: `Gift Card Reward - $${amount}`,
-        status: 'sent'
+        status: result.success ? 'sent' : 'failed',
+        failureReason: result.success ? null : result.error
       });
       
       await emailLog.save();
 
-      return { success: true, orderId: response.data.order.id };
+      return result;
     } catch (error) {
       console.error('Error sending gift card:', error);
-      return { success: false, error: error.response?.data || error.message };
+      
+      // Log the failure
+      const emailLog = new EmailLog({
+        recipient: null,
+        recipientEmail,
+        campaignId,
+        automationId,
+        subject: `Gift Card Reward - $${amount}`,
+        status: 'failed',
+        failureReason: error.message
+      });
+      
+      await emailLog.save();
+      
+      return { success: false, error: error.message };
     }
   }
 
