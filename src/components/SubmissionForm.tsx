@@ -225,31 +225,6 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
     setContestType("traditional");
   };
 
-  const handlePaymentSuccess = async () => {
-    setIsSubmitting(true);
-    try {
-      // Create a Stripe checkout session
-      const { sessionUrl, error } = await createCheckoutSession(
-        contestId || "",
-      );
-
-      if (error || !sessionUrl) {
-        throw new Error(error || "Failed to create checkout session");
-      }
-
-      // Redirect to Stripe checkout
-      window.location.href = sessionUrl;
-    } catch (error) {
-      console.error("Payment error:", error);
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to process payment. Please try again.",
-      );
-      setIsSubmitting(false);
-    }
-  };
-
   const handleCancel = () => {
     resetForm();
     onClose();
@@ -420,7 +395,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!imageUrl || isSubmitting || remainingSubmissions <= 0}
+            disabled={!imageUrl || isSubmitting}
             className="sm:w-auto w-full"
           >
             {isSubmitting ? "Submitting..." : "Submit Artwork"}
@@ -506,42 +481,17 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
 
       {/* Payment Dialog */}
       <Dialog open={showPaymentPrompt} onOpenChange={setShowPaymentPrompt}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>Submission Payment</DialogTitle>
+            <DialogTitle>Out of Submissions</DialogTitle>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="flex items-center justify-center text-amber-600 mb-2">
               <CreditCard className="h-12 w-12" />
             </div>
-            <p className="text-center">
-              You've used all your {tier} plan submissions for this month.
+            <p className="text-center font-medium">
+              You've run out of submissions, upgrade for more
             </p>
-            <div className="bg-muted/50 p-4 rounded-md">
-              <p className="text-center font-medium mb-2">Options:</p>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center p-2 border rounded-md hover:bg-accent/50 cursor-pointer">
-                  <div>
-                    <p className="font-medium">Pay-per-submission</p>
-                    <p className="text-sm text-muted-foreground">
-                      One-time fee for this submission
-                    </p>
-                  </div>
-                  <p className="font-bold">$2.99</p>
-                </div>
-                <div className="flex justify-between items-center p-2 border rounded-md hover:bg-accent/50 cursor-pointer">
-                  <div>
-                    <p className="font-medium">Upgrade your plan</p>
-                    <p className="text-sm text-muted-foreground">
-                      Get more monthly submissions
-                    </p>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => onClose()}>
-                    View Plans
-                  </Button>
-                </div>
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button
@@ -550,11 +500,14 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
             >
               Cancel
             </Button>
-            <Button onClick={handlePaymentSuccess}>
-              <span className="flex items-center gap-2">
-                <CreditCard className="h-4 w-4" />
-                Pay $2.99
-              </span>
+            <Button 
+              onClick={() => {
+                setShowPaymentPrompt(false);
+                onClose();
+                navigate('/pricing');
+              }}
+            >
+              Upgrade
             </Button>
           </DialogFooter>
         </DialogContent>

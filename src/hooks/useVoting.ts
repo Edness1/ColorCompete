@@ -5,7 +5,7 @@ import { useContestAnalytics } from "./useContestAnalytics";
 import { API_URL } from "@/lib/utils";
 
 interface UseVotingProps {
-  onVoteSuccess?: (submissionId: string, hasVoted: boolean) => void;
+  onVoteSuccess?: (submissionId: string, hasVoted: boolean, newVoteCount?: number) => void;
   onVoteError?: (error: Error) => void;
 }
 
@@ -36,7 +36,7 @@ export function useVoting({
   };
 
   // Function to toggle a vote (add or remove)
-  const toggleVote = async (submissionId: string) => {
+  const toggleVote = async (submissionId: string, currentHasVoted?: boolean) => {
     if (!user) {
       toast({
         title: "Authentication Required",
@@ -49,55 +49,88 @@ export function useVoting({
     setIsVoting(true);
 
     try {
-      // Check if the user has already voted for this submission
-      const hasVoted = await checkUserVote(submissionId);
+      // Use the provided currentHasVoted state, or fall back to checking the server
+      const hasVoted = currentHasVoted !== undefined ? currentHasVoted : await checkUserVote(submissionId);
 
-      if (hasVoted) {
-        // Remove the vote
-        const response = await fetch(
-          `${API_URL}/api/submissions/submissions/${submissionId}/vote`,
-          {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: user._id }),
-          },
-        );
+      // Determine the action based on current state
+      const action = hasVoted ? "DELETE" : "POST";
+      const shouldRemove = hasVoted;
 
-        if (!response.ok) throw new Error("Failed to remove vote");
+      const response = await fetch(
+        `${API_URL}/api/submissions/submissions/${submissionId}/vote`,
+        {
+          method: action,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: user._id }),
+        },
+      );
 
-        toast({
-          title: "Vote Removed",
-          description: "Your vote has been removed.",
-        });
-
-        onVoteSuccess(submissionId, false);
-        return false;
-      } else {
-        // Add a vote
-        const response = await fetch(
-          `${API_URL}/api/submissions/submissions/${submissionId}/vote`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: user._id }),
-          },
-        );
-
-        if (!response.ok) throw new Error("Failed to record vote");
-
-        toast({
-          title: "Vote Recorded",
-          description: "Your vote has been counted!",
-        });
-
-        // Optionally track vote if your API returns contest_id
+      if (response.ok) {
         const data = await response.json();
-        if (data?.contest_id) {
-          trackVote(data.contest_id);
+        const newVoteCount = data.voteCount || data.vote_count || data.votes;
+
+        if (shouldRemove) {
+          toast({
+            title: "Vote Removed",
+            description: "Your vote has been removed.",
+          });
+          onVoteSuccess(submissionId, false, newVoteCount);
+          return false;
+        } else {
+          toast({
+            title: "Vote Recorded",
+            description: "Your vote has been counted!",
+          });
+          
+          // Optionally track vote if your API returns contest_id
+          if (data?.contest_id) {
+            trackVote(data.contest_id);
+          }
+          
+          onVoteSuccess(submissionId, true, newVoteCount);
+          return true;
+        }
+      } else {
+        // If the request failed, try the opposite action
+        const oppositeAction = shouldRemove ? "POST" : "DELETE";
+        const fallbackResponse = await fetch(
+          `${API_URL}/api/submissions/submissions/${submissionId}/vote`,
+          {
+            method: oppositeAction,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: user._id }),
+          },
+        );
+
+        if (!fallbackResponse.ok) {
+          throw new Error(`Failed to ${shouldRemove ? 'add' : 'remove'} vote`);
         }
 
-        onVoteSuccess(submissionId, true);
-        return true;
+        const fallbackData = await fallbackResponse.json();
+        const newVoteCount = fallbackData.voteCount || fallbackData.vote_count || fallbackData.votes;
+
+        if (!shouldRemove) {
+          // We tried to add but failed, so we removed instead
+          toast({
+            title: "Vote Removed",
+            description: "Your vote has been removed.",
+          });
+          onVoteSuccess(submissionId, false, newVoteCount);
+          return false;
+        } else {
+          // We tried to remove but failed, so we added instead
+          toast({
+            title: "Vote Recorded",
+            description: "Your vote has been counted!",
+          });
+          
+          if (fallbackData?.contest_id) {
+            trackVote(fallbackData.contest_id);
+          }
+          
+          onVoteSuccess(submissionId, true, newVoteCount);
+          return true;
+        }
       }
     } catch (error) {
       console.error("Error toggling vote:", error);

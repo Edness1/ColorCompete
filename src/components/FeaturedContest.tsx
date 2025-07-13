@@ -29,6 +29,8 @@ interface Challenge {
   artStyle?: "anime" | "matisse" | "standard";
   createdAt?: string;
   submissions?: object[];
+  startTime: string,
+  endTime: string
 }
 
 const FeaturedContest = () => {
@@ -59,21 +61,37 @@ const FeaturedContest = () => {
     fetchLatestContest();
   }, []);
 
-  // 24-hour countdown from startDate
+  // Countdown showing remaining time from total contest duration
   useEffect(() => {
-    if (!latestContest?.startDate) return;
+    if (!latestContest?.startDate || !latestContest?.endDate || !latestContest?.startTime || !latestContest?.endTime) return;
 
     const getRemaining = () => {
-      const start = new Date(latestContest.startDate);
-      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+      // Combine date and time to create full datetime
+      const startDate = latestContest.startDate.split('T')[0]; // Get just the date part
+      const endDate = latestContest.endDate.split('T')[0]; // Get just the date part
+      
+      const start = new Date(`${startDate}T${latestContest.startTime}`);
+      const end = new Date(`${endDate}T${latestContest.endTime}`);
       const now = new Date();
-      const diff = end.getTime() - now.getTime();
+      
+      // If end time is before start time, assume it's the next day
+      if (end.getTime() <= start.getTime()) {
+        end.setDate(end.getDate() + 1);
+      }
+      
+      // Time remaining until end
+      const remaining = end.getTime() - now.getTime();
 
-      if (diff <= 0) return "00:00:00";
+      if (remaining <= 0) return "00:00:00";
 
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const secs = Math.floor((diff % (1000 * 60)) / 1000);
+      const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+      const secs = Math.floor((remaining % (1000 * 60)) / 1000);
+
+      if (days > 0) {
+        return `${days}d ${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+      }
 
       return (
         hours.toString().padStart(2, "0") +
@@ -90,7 +108,7 @@ const FeaturedContest = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [latestContest?.startDate]);
+  }, [latestContest?.startDate, latestContest?.endDate, latestContest?.startTime, latestContest?.endTime]);
 
   // Fetch submission count for this contest
   useEffect(() => {
@@ -305,10 +323,9 @@ const FeaturedContest = () => {
                     Step 2: {contestType === "traditional" ? "Color" : "Create"}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {description ||
-                      (contestType === "traditional"
+                    {contestType === "traditional"
                         ? "Use your favorite tools to color the artwork"
-                        : "Create an original digital artwork based on the theme")}
+                        : "Create an original digital artwork based on the theme"}
                   </p>
                 </div>
               </div>

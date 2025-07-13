@@ -7,11 +7,76 @@ import ContestList from "./ContestList";
 import SubmissionModeration from "./SubmissionModeration";
 import ContestAnalytics from "./ContestAnalytics";
 import { EmailMarketing } from "./EmailMarketing";
+import ContestView from "./ContestView";
 import { MainHeader } from "../header";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("contests");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingContest, setEditingContest] = useState<ContestManagementContest | null>(null);
+  const [viewingContest, setViewingContest] = useState<ContestListContest | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Type definition for ContestList
+  interface ContestListContest {
+    _id: string;
+    id: string;
+    title: string;
+    description: string;
+    image_url?: string;
+    lineArt?: string;
+    startDate: string;
+    endDate: string;
+    contest_type?: "traditional" | "digital"; // Frontend field name
+    contestType?: "traditional" | "digital"; // Backend field name
+    status: "draft" | "scheduled" | "active" | "completed";
+    createdAt?: string; // MongoDB timestamp field (primary)
+    updatedAt?: string; // MongoDB timestamp field
+    created_at?: string; // Alternative field name for compatibility
+  }
+
+  // Type definition for ContestManagement (should match the one in ContestManagement)
+  interface ContestManagementContest {
+    _id: string;
+    title: string;
+    description: string;
+    lineArt: string;
+    startTime: string;
+    endTime: string;
+    contestType: "traditional" | "digital";
+    status: "draft" | "scheduled" | "active" | "completed";
+  }
+
+  const handleViewContest = (contest: ContestListContest) => {
+    setViewingContest(contest);
+  };
+
+  const handleEditContest = (contest: ContestListContest) => {
+    // Convert ContestList contest to ContestManagement format
+    const managementContest: ContestManagementContest = {
+      _id: contest._id || contest.id || "",
+      title: contest.title,
+      description: contest.description,
+      lineArt: contest.lineArt || contest.image_url || "",
+      startTime: (contest as any).startTime || "09:00", // Default values since ContestList might not have these
+      endTime: (contest as any).endTime || "17:00",
+      contestType: contest.contestType || contest.contest_type || "traditional",
+      status: contest.status,
+    };
+    setEditingContest(managementContest);
+    setShowCreateForm(true);
+  };
+
+  const handleFormSuccess = () => {
+    setShowCreateForm(false);
+    setEditingContest(null);
+    setRefreshKey(prev => prev + 1); // Trigger ContestList refresh
+  };
+
+  const handleCancelForm = () => {
+    setShowCreateForm(false);
+    setEditingContest(null);
+  };
 
   return (
     <div className="container mx-auto py-8 bg-background">
@@ -42,14 +107,13 @@ export default function AdminDashboard() {
           {showCreateForm ? (
             <div className="mb-8">
               <ContestManagement
-                onSuccess={() => {
-                  setShowCreateForm(false);
-                }}
+                editingContest={editingContest}
+                onSuccess={handleFormSuccess}
               />
               <div className="mt-4 flex justify-end">
                 <Button
                   variant="outline"
-                  onClick={() => setShowCreateForm(false)}
+                  onClick={handleCancelForm}
                 >
                   Cancel
                 </Button>
@@ -57,12 +121,17 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <ContestList
-              onEdit={() => {
-                // Implement edit functionality
-                setShowCreateForm(true);
-              }}
+              key={refreshKey}
+              onEdit={handleEditContest}
+              onView={handleViewContest}
             />
           )}
+
+          {/* Contest View Dialog */}
+          <ContestView
+            contest={viewingContest}
+            onClose={() => setViewingContest(null)}
+          />
         </TabsContent>
 
         <TabsContent value="submissions">

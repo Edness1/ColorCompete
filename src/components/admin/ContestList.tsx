@@ -32,19 +32,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import axios from "axios"; // Add this import
 import { API_URL } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 
 interface Contest {
-  id: string;
+  _id: string;
+  id?: string; // Keep for backward compatibility
   title: string;
   description: string;
-  image_url: string;
+  image_url?: string; // For compatibility
+  lineArt?: string;   // Primary API field name
   startDate: string; // updated
   endDate: string;   // updated
-  contest_type: "traditional" | "digital";
+  contest_type?: "traditional" | "digital"; // Frontend field name
+  contestType?: "traditional" | "digital"; // Backend field name
   status: "draft" | "scheduled" | "active" | "completed";
-  created_at: string;
+  createdAt?: string; // MongoDB timestamp field (primary)
+  updatedAt?: string; // MongoDB timestamp field
+  created_at?: string; // Alternative field name for compatibility
 }
 
 interface ContestListProps {
@@ -57,10 +60,7 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [editDatesContest, setEditDatesContest] = useState<Contest | null>(null);
-  const [editStartDate, setEditStartDate] = useState<string>("");
-  const [editEndDate, setEditEndDate] = useState<string>("");
-  const [isSavingDates, setIsSavingDates] = useState(false);
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -85,8 +85,10 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
   }
 
   async function handleDelete(id: string) {
-    let deleteId = id;
-    console.log("Deleting contest with ID:", id);
+    setDeleteId(id);
+  }
+
+  async function confirmDelete() {
     if (!deleteId) return;
 
     setIsDeleting(true);
@@ -134,36 +136,7 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
     }
   }
 
-  function openEditDatesDialog(contest: Contest) {
-    setEditDatesContest(contest);
-    setEditStartDate(contest.startDate ? contest.startDate.slice(0, 10) : "");
-    setEditEndDate(contest.endDate ? contest.endDate.slice(0, 10) : "");
-  }
 
-  async function handleSaveDates() {
-    if (!editDatesContest) return;
-    setIsSavingDates(true);
-    try {
-      await axios.patch(API_URL + `/api/challenges/${editDatesContest.id}`, {
-        startDate: editStartDate,
-        endDate: editEndDate,
-      });
-      toast({
-        title: "Dates updated",
-        description: "Contest dates have been updated.",
-      });
-      fetchContests();
-      setEditDatesContest(null);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update dates.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSavingDates(false);
-    }
-  }
 
   return (
     <Card>
@@ -203,7 +176,7 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
                       {contest.title}
                     </TableCell>
                     <TableCell>
-                      {contest.contest_type === "traditional"
+                      {(contest.contestType || contest.contest_type) === "traditional"
                         ? "Traditional"
                         : "Digital"}
                     </TableCell>
@@ -241,15 +214,6 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEditDatesDialog(contest)}
-                          title="Edit Dates"
-                        >
-                          <span className="sr-only">Edit Dates</span>
-                          📅
-                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -271,7 +235,7 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={handleDelete}
+                onClick={confirmDelete}
                 disabled={isDeleting}
                 className="bg-destructive text-destructive-foreground"
               >
@@ -287,42 +251,6 @@ export default function ContestList({ onEdit, onView }: ContestListProps) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-
-        {/* Edit Dates Dialog */}
-        <Dialog open={!!editDatesContest} onOpenChange={() => setEditDatesContest(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Edit Contest Dates</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4">
-              <label>
-                Start Date
-                <Input
-                  type="date"
-                  value={editStartDate}
-                  onChange={e => setEditStartDate(e.target.value)}
-                />
-              </label>
-              <label>
-                End Date
-                <Input
-                  type="date"
-                  value={editEndDate}
-                  onChange={e => setEditEndDate(e.target.value)}
-                />
-              </label>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditDatesContest(null)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveDates} disabled={isSavingDates}>
-                {isSavingDates ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </CardContent>
     </Card>
   );

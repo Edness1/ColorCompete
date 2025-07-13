@@ -17,6 +17,6 @@ const ChallengeSchema = new mongoose.Schema({
     }
   ],
   winner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Challenge', ChallengeSchema);

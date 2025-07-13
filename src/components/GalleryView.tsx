@@ -55,18 +55,44 @@ const GalleryView = ({
   const [originalSubmissions, setOriginalSubmissions] = useState<Submission[]>([]); // <-- move here
   const { user } = useAuth();
 
+  // Check for submission parameter in URL and scroll to it
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const submissionId = urlParams.get('submission');
+    
+    if (submissionId && gallerySubmissions.length > 0) {
+      // Small delay to ensure the DOM is ready
+      setTimeout(() => {
+        const element = document.getElementById(`submission-${submissionId}`);
+        if (element) {
+          element.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+          // Add a subtle highlight effect
+          element.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+          setTimeout(() => {
+            element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2');
+          }, 3000);
+        }
+      }, 100);
+    }
+  }, [gallerySubmissions]);
+
   // Use the voting hook
   const { toggleVote, isVoting, checkUserVote } = useVoting({
-    onVoteSuccess: (submissionId, hasVoted) => {
+    onVoteSuccess: (submissionId, hasVoted, newVoteCount) => {
       // Update the local state to reflect the vote change
       setGallerySubmissions((prevSubmissions) =>
         prevSubmissions.map((submission) =>
           submission.id === submissionId
             ? {
                 ...submission,
-                voteCount: hasVoted
-                  ? submission.voteCount + 1
-                  : submission.voteCount - 1,
+                voteCount: newVoteCount !== undefined 
+                  ? newVoteCount 
+                  : hasVoted
+                    ? submission.voteCount + 1
+                    : Math.max(0, submission.voteCount - 1), // Prevent negative vote counts as fallback
                 hasVoted,
               }
             : submission,
@@ -144,24 +170,21 @@ const GalleryView = ({
     }
   }, [user]);
 
-  const handleVote = async (id: string) => {
-    await toggleVote(id);
+  const handleVote = async (id: string, hasVoted: boolean) => {
+    await toggleVote(id, hasVoted);
   };
 
   const handleShare = async (submission: Submission) => {
-    const shareUrl = `${window.location.origin}/gallery?submission=${submission.id}`;
+    const shareUrl = `${window.location.origin}/gallery?submission=${submission.id}#submission-${submission.id}`;
+    const shareText = `You can vote for me at ${shareUrl}`;
     const shareData = {
-      title: `Amazing artwork by ${submission.artistName}`,
-      text: `Check out this beautiful ${submission.contestType} artwork by ${submission.artistName} in our daily coloring contest!`,
+      title: `Vote for ${submission.artistName}'s artwork!`,
+      text: shareText,
       url: shareUrl,
     };
 
-    // Try to use the Web Share API first (available on mobile and some desktop browsers)
-    if (
-      navigator.share &&
-      navigator.canShare &&
-      navigator.canShare(shareData)
-    ) {
+    // Check if Web Share API is available and the data can be shared
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
       try {
         await navigator.share(shareData);
         return;
@@ -169,11 +192,23 @@ const GalleryView = ({
         // User cancelled or error occurred, fall back to clipboard
         console.log("Share cancelled or failed:", error);
       }
+    } else if (navigator.share) {
+      // Fallback for browsers that support share but not canShare
+      try {
+        await navigator.share({
+          title: shareData.title,
+          text: shareData.text,
+          url: shareData.url,
+        });
+        return;
+      } catch (error) {
+        console.log("Share cancelled or failed:", error);
+      }
     }
 
     // Fallback: Copy to clipboard
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(shareText);
       setCopiedSubmissionId(submission.id);
 
       // Reset the copied state after 2 seconds
@@ -187,7 +222,7 @@ const GalleryView = ({
       console.error("Failed to copy to clipboard:", error);
       // Fallback: Select the URL text (for older browsers)
       const textArea = document.createElement("textarea");
-      textArea.value = shareUrl;
+      textArea.value = shareText;
       document.body.appendChild(textArea);
       textArea.select();
       document.execCommand("copy");
@@ -394,8 +429,9 @@ const GalleryView = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredSubmissions.map((submission) => (
               <Card
+                id={`submission-${submission.id}`}
                 key={submission.id}
-                className="overflow-hidden hover:shadow-lg transition-shadow"
+                className="overflow-hidden hover:shadow-lg transition-shadow scroll-mt-8"
               >
                 <div className="relative aspect-square overflow-hidden">
                   <img
@@ -436,7 +472,7 @@ const GalleryView = ({
                         variant="ghost"
                         size="sm"
                         className="p-1 h-auto"
-                        onClick={() => handleVote(submission.id)}
+                        onClick={() => handleVote(submission.id, submission.hasVoted)}
                         disabled={isVoting}
                         title={
                           submission.hasVoted

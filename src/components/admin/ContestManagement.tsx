@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -16,12 +16,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -29,17 +23,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { format } from "date-fns";
-import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
-import { API_URL, cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
+import { API_URL } from "@/lib/utils";
 import axios from "axios"; // Add this import
 
 const formSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
   description: z.string().min(10, "Description must be at least 10 characters"),
-  lineArt: z.string().url("Please enter a valid URL"), // replaced imageUrl
-  startDate: z.date(),
-  endDate: z.date(),
+  lineArt: z.string().optional(), // Make lineArt optional
   startTime: z.string().min(1, "Start time is required"), // added
   endTime: z.string().min(1, "End time is required"),     // added
   contestType: z.enum(["traditional", "digital"]),
@@ -48,6 +39,18 @@ const formSchema = z.object({
 
 interface ContestManagementProps {
   onSuccess?: () => void;
+  editingContest?: Contest | null;
+}
+
+interface Contest {
+  _id: string;
+  title: string;
+  description: string;
+  lineArt: string;
+  startTime: string;
+  endTime: string;
+  contestType: "traditional" | "digital";
+  status: "draft" | "scheduled" | "active" | "completed";
 }
 
 const CLOUDINARY_UPLOAD_PRESET = "cewqtwou"; // <-- set this
@@ -55,6 +58,7 @@ const CLOUDINARY_CLOUD_NAME = "dwnqwem6e"; // <-- set this
 
 export default function ContestManagement({
   onSuccess,
+  editingContest,
 }: ContestManagementProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -64,17 +68,42 @@ export default function ContestManagement({
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      title: "",
-      description: "",
-      lineArt: "",
-      startDate: new Date(),
-      endDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      startTime: "09:00",
-      endTime: "17:00",
-      contestType: "traditional",
-      status: "draft",
+      title: editingContest?.title || "",
+      description: editingContest?.description || "",
+      lineArt: editingContest?.lineArt || "",
+      startTime: editingContest?.startTime || "09:00",
+      endTime: editingContest?.endTime || "17:00",
+      contestType: editingContest?.contestType || "traditional",
+      status: editingContest?.status || "draft",
     },
   });
+
+  // Update form values when editingContest changes
+  useEffect(() => {
+    if (editingContest) {
+      form.reset({
+        title: editingContest.title,
+        description: editingContest.description,
+        lineArt: editingContest.lineArt,
+        startTime: editingContest.startTime,
+        endTime: editingContest.endTime,
+        contestType: editingContest.contestType,
+        status: editingContest.status,
+      });
+      setLineArtPreview(editingContest.lineArt);
+    } else {
+      form.reset({
+        title: "",
+        description: "",
+        lineArt: "",
+        startTime: "09:00",
+        endTime: "17:00",
+        contestType: "traditional",
+        status: "draft",
+      });
+      setLineArtPreview(null);
+    }
+  }, [editingContest, form]);
 
   const handleLineArtUpload = async (e: React.ChangeEvent<HTMLInputElement>, onChange: (url: string) => void) => {
     const file = e.target.files?.[0];
@@ -105,34 +134,59 @@ export default function ContestManagement({
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
-      // Send POST request to backend API
-      await axios.post(API_URL + "/api/challenges", {
+      // Prepare the data object
+      const contestData = {
         title: values.title,
         description: values.description,
-        lineArt: values.lineArt,
-        startDate: values.startDate,
-        endDate: values.endDate,
         startTime: values.startTime,
         endTime: values.endTime,
         contestType: values.contestType,
         status: values.status,
-      });
+        startDate: new Date(), // Add current date as start date
+        endDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Add end date (24 hours from now)
+        ...(values.lineArt && { lineArt: values.lineArt }), // Only include lineArt if it's provided
+      };
 
-      toast({
-        title: "Contest created",
-        description: `${values.title} has been successfully created.`,
-      });
+      if (editingContest) {
+        // Update existing contest
+        await axios.put(API_URL + `/api/challenges/${editingContest._id}`, contestData);
 
-      // Reset form
-      form.reset();
+        toast({
+          title: "Contest updated",
+          description: `${values.title} has been successfully updated.`,
+        });
+      } else {
+        // Create new contest - lineArt is required for new contests
+        if (!values.lineArt) {
+          toast({
+            title: "Error",
+            description: "Line art image is required for new contests.",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        await axios.post(API_URL + "/api/challenges", contestData);
+
+        toast({
+          title: "Contest created",
+          description: `${values.title} has been successfully created.`,
+        });
+      }
+
+      // Reset form only if creating new contest
+      if (!editingContest) {
+        form.reset();
+        setLineArtPreview(null);
+      }
 
       // Call onSuccess callback if provided
       if (onSuccess) onSuccess();
     } catch (error) {
-      console.error("Error creating contest:", error);
+      console.error("Error saving contest:", error);
       toast({
         title: "Error",
-        description: "Failed to create contest. Please try again.",
+        description: `Failed to ${editingContest ? 'update' : 'create'} contest. Please try again.`,
         variant: "destructive",
       });
     } finally {
@@ -142,7 +196,9 @@ export default function ContestManagement({
 
   return (
     <div className="bg-background p-6 rounded-lg border">
-      <h2 className="text-2xl font-bold mb-6">Create New Contest</h2>
+      <h2 className="text-2xl font-bold mb-6">
+        {editingContest ? 'Edit Contest' : 'Create New Contest'}
+      </h2>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -189,11 +245,14 @@ export default function ContestManagement({
             name="lineArt"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Line Art Image URL</FormLabel>
+                <FormLabel>Line Art Image</FormLabel>
                 <FormControl>
                   <>
-                    
-                    
+                    <Input 
+                      placeholder="Enter image URL (optional)" 
+                      {...field}
+                      value={field.value || ''}
+                    />
                     <div className="flex items-center gap-2 mt-2">
                       <input
                         type="file"
@@ -226,96 +285,12 @@ export default function ContestManagement({
                 </FormControl>
                 <FormDescription>
                   URL to the line art image for traditional contests or
-                  reference image for digital contests
+                  reference image for digital contests (optional when updating)
                 </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FormField
-              control={form.control}
-              name="startDate"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Start Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground",
-                          )}
-                        >
-                          {field.value ? (
-                            format(field.value, "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                          date < new Date(new Date().setHours(0, 0, 0, 0))
-                        }
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="endDate"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>End Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground",
-                          )}
-                        >
-                          {field.value ? (
-                            format(field.value, "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) => date < form.getValues().startDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <FormField
@@ -409,10 +384,10 @@ export default function ContestManagement({
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating Contest...
+                  {editingContest ? 'Updating Contest...' : 'Creating Contest...'}
                 </>
               ) : (
-                "Create Contest"
+                editingContest ? 'Update Contest' : 'Create Contest'
               )}
             </Button>
           </div>

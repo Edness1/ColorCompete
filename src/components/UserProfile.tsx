@@ -53,6 +53,7 @@ import { supabase } from "@/lib/supabase";
 import { Link } from "react-router-dom";
 import { MainHeader } from "./header";
 import { API_URL } from "@/lib/utils";
+import SubmissionButton from "./SubmissionButton";
 
 interface Submission {
   id: string;
@@ -62,6 +63,7 @@ interface Submission {
   votes: number;
   contestId: string;
   contestName: string;
+  contestType: string;
 }
 
 interface Achievement {
@@ -99,6 +101,7 @@ const UserProfile = ({
       votes: 42,
       contestId: "c1",
       contestName: "Fantasy Landscapes",
+      contestType: "daily",
     },
     {
       id: "2",
@@ -109,6 +112,7 @@ const UserProfile = ({
       votes: 37,
       contestId: "c2",
       contestName: "Underwater World",
+      contestType: "daily",
     },
     {
       id: "3",
@@ -119,6 +123,7 @@ const UserProfile = ({
       votes: 51,
       contestId: "c3",
       contestName: "Cosmic Journey",
+      contestType: "weekly",
     },
     {
       id: "4",
@@ -129,6 +134,7 @@ const UserProfile = ({
       votes: 29,
       contestId: "c4",
       contestName: "Natural Wonders",
+      contestType: "daily",
     },
   ],
   achievements: initialAchievements = [
@@ -168,6 +174,7 @@ const UserProfile = ({
   const [userSubmissions, setUserSubmissions] = useState<Submission[]>([]);
   const [userAchievements, setUserAchievements] = useState<Achievement[]>([]);
   const [apiProfile, setApiProfile] = useState<any>(null);
+  const [activeContestId, setActiveContestId] = useState<string | null>(null);
 
   // Fetch user profile data from your API (not Supabase)
   useEffect(() => {
@@ -210,8 +217,26 @@ const UserProfile = ({
       }
     };
 
+    const fetchActiveContest = async () => {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || "";
+        const res = await fetch(`${API_URL}/api/challenges`);
+        if (!res.ok) throw new Error("Failed to fetch contests");
+        const data = await res.json();
+        
+        // Find the most recent active contest
+        const activeContest = data.find((contest: any) => contest.status === "active");
+        if (activeContest) {
+          setActiveContestId(activeContest._id);
+        }
+      } catch (error) {
+        console.error("Error fetching active contest:", error);
+      }
+    };
+
     fetchApiProfile();
     fetchUserBadges();
+    fetchActiveContest();
   }, [user]);
 
   // Fetch user profile data from Supabase (replace with API)
@@ -249,6 +274,7 @@ const UserProfile = ({
             const submissionsWithTitles = await Promise.all(
               userSubmissionsOnly.map(async (sub: any) => {
                 let challengeTitle = "Daily Contest";
+                let challengeType = "daily"; // Default to daily
                 
                 // If we have a challenge_id, fetch the challenge details
                 if (sub.challenge_id) {
@@ -257,6 +283,7 @@ const UserProfile = ({
                     if (challengeRes.ok) {
                       const challengeData = await challengeRes.json();
                       challengeTitle = challengeData.title || challengeData.name || "Daily Contest";
+                      challengeType = challengeData.type || challengeData.contestType || "daily";
                     }
                   } catch (challengeError) {
                     console.error("Error fetching challenge details:", challengeError);
@@ -271,6 +298,7 @@ const UserProfile = ({
                   votes: Array.isArray(sub.votes) ? sub.votes.length : (sub.votes || 0),
                   contestId: sub.contest_id || sub.contestId || sub.challenge_id,
                   contestName: challengeTitle,
+                  contestType: challengeType,
                 };
               })
             );
@@ -404,7 +432,7 @@ const UserProfile = ({
     <div className="w-full max-w-5xl mx-auto p-4 bg-background">
       <MainHeader />
       <Card className="mb-8">
-        <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between">
+        <CardHeader>
           <div className="flex items-center gap-4">
             <Avatar className="h-20 w-20 border-2 border-primary">
               <AvatarImage src={avatarUrl} alt={username} />
@@ -425,6 +453,15 @@ const UserProfile = ({
                   </Badge>
                 )}
               </div>
+              {user && (
+                <div className="mt-3">
+                  <SubmissionButton
+                    contestId={activeContestId || undefined}
+                    variant="outline"
+                    size="default"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>
