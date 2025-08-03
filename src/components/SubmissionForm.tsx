@@ -72,13 +72,15 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
   const location = useLocation();
   const {
     remainingSubmissions,
-    tier,
+    tier: rawTier,
     deductSubmission,
     getSubmissionFee,
     createCheckoutSession,
     verifyPaymentSession,
+    refreshSubscriptionData,
     isLoading: isLoadingSubscription,
   } = useSubscription();
+  const tier = rawTier || "free"; // Ensure tier is never null
 
   const [imageUrl, setImageUrl] = useState<string>("");
   const [preview, setPreview] = useState<string | null>(null);
@@ -132,6 +134,11 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
   }, [imageUrl]);
 
   const handleSubmit = () => {
+    console.log("handleSubmit called");
+    console.log("imageUrl:", imageUrl);
+    console.log("user:", user);
+    console.log("remainingSubmissions:", remainingSubmissions);
+    
     if (!imageUrl) {
       setError("Please enter an image URL");
       return;
@@ -141,9 +148,11 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       return;
     }
     if (remainingSubmissions <= 0) {
+      console.log("No submissions remaining, showing payment prompt");
       setShowPaymentPrompt(true);
       return;
     }
+    console.log("All checks passed, showing confirmation");
     setShowConfirmation(true);
   };
 
@@ -151,6 +160,26 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
     if (!imageUrl || !user) return;
     setIsSubmitting(true);
     try {
+      console.log("Starting submission process...");
+      console.log("Current remaining submissions:", remainingSubmissions);
+      console.log("User ID:", user._id);
+      
+      // Deduct a submission credit BEFORE submitting if user has credits
+      let shouldProceed = true;
+      if (remainingSubmissions > 0) {
+        console.log("Attempting to deduct submission...");
+        shouldProceed = await deductSubmission();
+        console.log("Deduction result:", shouldProceed);
+        if (!shouldProceed) {
+          throw new Error("Failed to process submission credit. Please try again.");
+        }
+      } else {
+        console.log("No remaining submissions, should redirect to payment");
+        setShowPaymentPrompt(true);
+        setIsSubmitting(false);
+        return;
+      }
+
       const submissionPayload = {
         user_id: user._id,
         file_path: imageUrl,
@@ -162,8 +191,8 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
         created_at: new Date().toISOString(),
         challenge_id: contestId,
         profiles: {
-          username: user.username,
-          avatar_url: user.avatar_url,
+          username: user.username || "Anonymous",
+          avatar_url: "", // Will be set by the API based on user profile
         },
       };
 
@@ -178,17 +207,15 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
         throw new Error(errorData.message || "Failed to submit artwork");
       }
 
-      // Deduct a submission credit only if user had credits
-      if (remainingSubmissions > 0) {
-        await deductSubmission();
-      }
-
       if (onSubmit) {
         await onSubmit({
           imageUrl,
           ageGroup,
         });
       }
+
+      // Refresh subscription data to ensure UI is in sync
+      await refreshSubscriptionData();
 
       toast({
         title: "Submission Successful",
@@ -273,6 +300,14 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
                   {remainingSubmissions} submission
                   {remainingSubmissions !== 1 ? "s" : ""} remaining
                 </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => refreshSubscriptionData()}
+                  className="ml-2 h-6 px-2 text-xs"
+                >
+                  Refresh
+                </Button>
               </div>
             </div>
           )}

@@ -85,6 +85,10 @@ export function SubscriptionProvider({
       } else {
         console.log("Subscription data:", data.subscription);
         const { tier, remaining_submissions, month, year } = data.subscription;
+        
+        // Handle null tier by defaulting to "free"
+        const validTier = tier || "free";
+        
         const now = new Date();
         if (month !== now.getMonth() + 1 || year !== now.getFullYear()) {
           // Reset for new month
@@ -93,15 +97,32 @@ export function SubscriptionProvider({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               userId: user._id,
-              remaining_submissions: tierSubmissionLimits[tier as SubscriptionTier],
+              tier: validTier,
+              remaining_submissions: tierSubmissionLimits[validTier as SubscriptionTier],
               month: now.getMonth() + 1,
               year: now.getFullYear(),
             }),
           });
-          setTier(tier as SubscriptionTier);
-          setRemainingSubmissions(tierSubmissionLimits[tier as SubscriptionTier]);
+          setTier(validTier as SubscriptionTier);
+          setRemainingSubmissions(tierSubmissionLimits[validTier as SubscriptionTier]);
         } else {
-          setTier(tier as SubscriptionTier);
+          // If tier is null, update the database to fix it
+          if (!tier) {
+            console.log("Tier is null, updating database to set tier to 'free'");
+            await fetch(`${API_URL}/api/subscription`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: user._id,
+                tier: "free",
+                remaining_submissions: remaining_submissions,
+                month: month,
+                year: year,
+              }),
+            });
+          }
+          
+          setTier(validTier as SubscriptionTier);
           setRemainingSubmissions(remaining_submissions);
         }
       }
@@ -114,18 +135,56 @@ export function SubscriptionProvider({
   };
 
   const deductSubmission = async (): Promise<boolean> => {
-    if (!user) return false;
-    if (remainingSubmissions <= 0) return false;
+    console.log("deductSubmission called");
+    console.log("user:", user);
+    console.log("remainingSubmissions:", remainingSubmissions);
+    
+    if (!user) {
+      console.log("No user, returning false");
+      return false;
+    }
+    if (remainingSubmissions <= 0) {
+      console.log("No remaining submissions, returning false");
+      return false;
+    }
     try {
+      console.log("Making API call to deduct submission");
       const res = await fetch(`${API_URL}/api/subscription/deduct`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user._id }),
       });
-      if (!res.ok) throw new Error("Failed to deduct submission");
-      setRemainingSubmissions((prev) => prev - 1);
+      
+      console.log("API response status:", res.status);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("API Error Response:", errorText);
+        let errorData: any = {};
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          errorData = { message: errorText };
+        }
+        console.error("Failed to deduct submission:", errorData);
+        throw new Error(`API Error: ${errorData.message || errorText}`);
+      }
+      
+      console.log("API call successful, updating local state");
+      
+      // Update local state immediately
+      setRemainingSubmissions((prev) => {
+        const newValue = prev - 1;
+        console.log(`Deducted submission: ${prev} -> ${newValue}`);
+        return newValue;
+      });
+      
       return true;
     } catch (error) {
+      console.error("Error in deductSubmission:", error);
+      // Refresh subscription data to sync with server
+      console.log("Refreshing subscription data...");
+      await refreshSubscriptionData();
       return false;
     }
   };

@@ -163,10 +163,11 @@ const UserProfile = ({
 }: UserProfileProps) => {
   const { user } = useAuth();
   const {
-    tier,
+    tier: rawTier,
     remainingSubmissions,
     isLoading: subscriptionLoading,
   } = useSubscription();
+  const tier = rawTier || "free"; // Ensure tier is never null
   const userStats = useUserStats();
   const [activeTab, setActiveTab] = useState("submissions");
   const [isLoading, setIsLoading] = useState(false);
@@ -201,7 +202,7 @@ const UserProfile = ({
         
         // Convert badges to achievement format
         const achievements = badges.map((badge: any) => ({
-          id: badge.id,
+          id: badge.id || badge._id || `badge-${Date.now()}-${Math.random()}`,
           title: badge.name,
           description: badge.description,
           date: new Date(badge.earnedAt).toLocaleDateString(),
@@ -291,7 +292,7 @@ const UserProfile = ({
                 }
 
                 return {
-                  id: sub.id,
+                  id: sub.id || sub._id || `submission-${Date.now()}-${Math.random()}`,
                   title: challengeTitle,
                   imageUrl: sub.file_path || sub.file_path,
                   date: new Date(sub.created_at || sub.date).toLocaleDateString(),
@@ -396,7 +397,7 @@ const UserProfile = ({
     setEditBio(apiProfile?.bio || bio);
     setEditLocation(apiProfile?.location || "");
     setEditWebsite(apiProfile?.website || "");
-  }, [apiProfile]);
+  }, [apiProfile, username, email, firstName, lastName, bio]);
 
   // Handle update
   const handleUpdateProfile = async () => {
