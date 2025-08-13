@@ -276,8 +276,13 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       );
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
-      setImageUrl(data.secure_url);
-      setPreview(data.secure_url);
+
+      // Enhance the image using Cloudinary's e_enhance transformation
+      // Insert '/e_enhance/' after '/upload/' in the URL
+      let enhancedUrl = data.secure_url;
+      enhancedUrl = enhancedUrl.replace('/upload/', '/upload/e_enhance/');
+      setImageUrl(enhancedUrl);
+      setPreview(enhancedUrl);
     } catch (err) {
       setError("Failed to upload image. Please try again.");
     }
@@ -320,6 +325,87 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+
+          <div className="space-y-6">
+            {/* Image Upload Tips */}
+            <div className="bg-muted/30 p-4 rounded-lg border">
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                📸 Tips for the Best Quality Upload (Phone Users Welcome!)
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                To make your coloring artwork shine for the judges, follow these
+                quick steps before uploading:
+              </p>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <p className="font-medium">1. Use Natural Lighting</p>
+                  <p className="text-muted-foreground ml-4">
+                    <strong>Best:</strong> Indirect sunlight from a nearby
+                    window.
+                    <br />
+                    <strong>Avoid:</strong> Harsh overhead lights or flash.
+                    <br />
+                    <strong>Pro Tip:</strong> Morning or late afternoon gives
+                    the most even light.
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">
+                    2. Shoot From Above, Keep It Flat
+                  </p>
+                  <p className="text-muted-foreground ml-4">
+                    Lay your artwork on a flat surface.
+                    <br />
+                    Hold your phone directly above it—no angles!
+                    <br />
+                    Use both hands or a tripod for stability.
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">3. Avoid Shadows</p>
+                  <p className="text-muted-foreground ml-4">
+                    Watch out for your own shadow on the paper.
+                    <br />
+                    Try positioning the light source behind or to the side of
+                    your phone, not behind you.
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">4. Clean Your Lens</p>
+                  <p className="text-muted-foreground ml-4">
+                    A quick lens wipe makes a huge difference—no smudges or
+                    blur.
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">
+                    5. Zoom with Your Feet, Not the Camera
+                  </p>
+                  <p className="text-muted-foreground ml-4">
+                    Don't pinch to zoom; instead, move your phone closer to fill
+                    the frame.
+                    <br />
+                    Stay just far enough that the whole artwork fits without
+                    distortion.
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">6. No Filters, Please!</p>
+                  <p className="text-muted-foreground ml-4">
+                    Keep it true to life—judges want to see the real colors you
+                    used.
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">7. Crop Tight, Not Sloppy</p>
+                  <p className="text-muted-foreground ml-4">
+                    Crop just outside the edges of the artwork. No clutter or
+                    background items.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <Card className="border-2 border-dashed border-muted-foreground/25 bg-background">
             <CardContent className="p-4">
@@ -369,55 +455,6 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
               )}
             </CardContent>
           </Card>
-
-          <div className="grid gap-4">
-            <div>
-              <Label
-                htmlFor="age-group"
-                className="text-sm font-medium mb-2 block"
-              >
-                Age Group Category
-              </Label>
-              <Select value={ageGroup} onValueChange={setAgeGroup}>
-                <SelectTrigger id="age-group" className="w-full">
-                  <SelectValue placeholder="Select age group" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="child">Child (under 13)</SelectItem>
-                  <SelectItem value="teen">Teen (13-17)</SelectItem>
-                  <SelectItem value="adult">Adult (18+)</SelectItem>
-                  <SelectItem value="senior">Senior (65+)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground mt-1">
-                Submissions are grouped by age category for fair competition
-              </p>
-            </div>
-
-            <div>
-              <Label className="text-sm font-medium mb-2 block">
-                Contest Format
-              </Label>
-              <RadioGroup
-                value={contestType}
-                onValueChange={setContestType}
-                className="flex flex-col space-y-2 mt-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="traditional" id="traditional" />
-                  <Label htmlFor="traditional" className="cursor-pointer">
-                    Traditional (Color the provided line art)
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="digital" id="digital" />
-                  <Label htmlFor="digital" className="cursor-pointer">
-                    Digital (Create original digital artwork based on theme)
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
-          </div>
         </div>
 
         <DialogFooter className="flex flex-col sm:flex-row gap-2">

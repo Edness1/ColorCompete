@@ -7,12 +7,14 @@ import {
   Star,
   Filter,
   ChevronDown,
-  Users,
   Loader2,
   Share2,
   Copy,
   Check,
+  Instagram,
+  Music,
 } from "lucide-react";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,16 +22,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/lib/supabase";
+import { MainHeader } from "./header";
+import { MainFooter } from "./footer";
+import { API_URL } from "@/lib/utils";
 import { useVoting } from "@/hooks/useVoting";
 import { useAuth } from "@/contexts/AuthContext";
-import { MainHeader } from "./header";
-import { API_URL } from "@/lib/utils";
 
 interface Submission {
   id: string;
   imageUrl: string;
   artistName: string;
-  voteCount: number; // Always a number
+  voteCount: number;
   submissionDate: string;
   hasVoted: boolean;
   ageGroup?: string;
@@ -37,6 +40,7 @@ interface Submission {
   user_id?: string;
   public_url?: string;
 }
+
 
 const GalleryView = ({
   submissions = [],
@@ -55,21 +59,15 @@ const GalleryView = ({
   const [originalSubmissions, setOriginalSubmissions] = useState<Submission[]>([]); // <-- move here
   const { user } = useAuth();
 
-  // Check for submission parameter in URL and scroll to it
+  // Scroll to submission if present in URL
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const submissionId = urlParams.get('submission');
-    
     if (submissionId && gallerySubmissions.length > 0) {
-      // Small delay to ensure the DOM is ready
       setTimeout(() => {
         const element = document.getElementById(`submission-${submissionId}`);
         if (element) {
-          element.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'center' 
-          });
-          // Add a subtle highlight effect
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
           element.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
           setTimeout(() => {
             element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2');
@@ -82,17 +80,16 @@ const GalleryView = ({
   // Use the voting hook
   const { toggleVote, isVoting, checkUserVote } = useVoting({
     onVoteSuccess: (submissionId, hasVoted, newVoteCount) => {
-      // Update the local state to reflect the vote change
       setGallerySubmissions((prevSubmissions) =>
         prevSubmissions.map((submission) =>
           submission.id === submissionId
             ? {
                 ...submission,
-                voteCount: newVoteCount !== undefined 
-                  ? newVoteCount 
+                voteCount: newVoteCount !== undefined
+                  ? newVoteCount
                   : hasVoted
                     ? submission.voteCount + 1
-                    : Math.max(0, submission.voteCount - 1), // Prevent negative vote counts as fallback
+                    : Math.max(0, submission.voteCount - 1),
                 hasVoted,
               }
             : submission,
@@ -101,7 +98,7 @@ const GalleryView = ({
     },
   });
 
-  // Fetch submissions from Supabase
+  // Fetch submissions from API and transform
   useEffect(() => {
     const fetchSubmissions = async () => {
       setFetchingSubmissions(true);
@@ -111,10 +108,9 @@ const GalleryView = ({
           throw new Error("Failed to fetch submissions from API");
         }
         const data = await response.json();
-
         if (data && Array.isArray(data) && data.length > 0) {
           const transformedData: Submission[] = await Promise.all(
-            data.map(async (item) => {
+            data.map(async (item: any) => {
               const id = item._id || item.id;
               // Use checkUserVote to determine if the user has voted
               const hasVoted = await checkUserVote(id);
@@ -144,7 +140,6 @@ const GalleryView = ({
               };
             })
           );
-
           setOriginalSubmissions(transformedData);
           setGallerySubmissions(transformedData);
           console.log(`Loaded ${transformedData.length} submissions from API`);
@@ -161,7 +156,7 @@ const GalleryView = ({
       }
     };
 
-    if (submissions.length > 0) {
+    if (submissions && submissions.length > 0) {
       setOriginalSubmissions(submissions);
       setGallerySubmissions(submissions);
       setFetchingSubmissions(false);
@@ -210,12 +205,10 @@ const GalleryView = ({
     try {
       await navigator.clipboard.writeText(shareText);
       setCopiedSubmissionId(submission.id);
-
       // Reset the copied state after 2 seconds
       setTimeout(() => {
         setCopiedSubmissionId(null);
       }, 2000);
-
       // Show a toast notification
       // You could also use your toast system here if available
     } catch (error) {
@@ -234,30 +227,39 @@ const GalleryView = ({
     }
   };
 
-  const filterSubmissions = (
-    filterType: string,
-    age: string = ageFilter,
-    format: string = formatFilter,
+  const handleSocialShare = (
+    platform: "instagram" | "tiktok",
+    submission: Submission,
   ) => {
+    const shareUrl = `${window.location.origin}/gallery?submission=${submission.id}`;
+    const shareText = `Check out this amazing ${submission.contestType} artwork by ${submission.artistName} in our daily coloring contest! 🎨✨`;
+
+    if (platform === "instagram") {
+      const textToCopy = `${shareText}\n\n${shareUrl}\n\n#ColorCompete #ArtContest #Coloring #DigitalArt`;
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        setCopiedSubmissionId(submission.id);
+        setTimeout(() => setCopiedSubmissionId(null), 2000);
+        window.open("https://www.instagram.com/", "_blank");
+      });
+    } else if (platform === "tiktok") {
+      const textToCopy = `${shareText}\n\n${shareUrl}\n\n#ColorCompete #ArtContest #Coloring #DigitalArt #ArtChallenge`;
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        setCopiedSubmissionId(submission.id);
+        setTimeout(() => setCopiedSubmissionId(null), 2000);
+        window.open("https://www.tiktok.com/", "_blank");
+      });
+    }
+  };
+
+  const filterSubmissions = (filterType: string, age = ageFilter, format = formatFilter) => {
     setFilter(filterType);
-    setAgeFilter(age);
-    setFormatFilter(format);
-
     let filtered = [...originalSubmissions];
-
-    // Apply age filter
     if (age !== "all") {
-      filtered = filtered.filter((submission) => submission.ageGroup === age);
+      filtered = filtered.filter((s) => s.ageGroup === age);
     }
-
-    // Apply format filter
     if (format !== "all") {
-      filtered = filtered.filter(
-        (submission) => submission.contestType === format,
-      );
+      filtered = filtered.filter((s) => s.contestType === format);
     }
-
-    // Apply sort filter
     switch (filterType) {
       case "top-rated":
         filtered.sort((a, b) => b.voteCount - a.voteCount);
@@ -275,321 +277,215 @@ const GalleryView = ({
       default:
         break;
     }
-
     setGallerySubmissions(filtered);
   };
 
-  const filterByAge = (age: string) => {
-    filterSubmissions(filter, age, formatFilter);
-  };
-
-  const filterByFormat = (format: string) => {
-    filterSubmissions(filter, ageFilter, format);
-  };
-
-  // Helper to check if a date is today
-  const isToday = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    return (
-      date.getFullYear() === now.getFullYear() &&
-      date.getMonth() === now.getMonth() &&
-      date.getDate() === now.getDate()
-    );
-  };
-
-  // Filter submissions based on activeTab
-  const filteredSubmissions = gallerySubmissions.filter((submission) => {
-    if (activeTab === "today") {
-      return isToday(submission.submissionDate);
-    }
-    if (activeTab === "past") {
-      return !isToday(submission.submissionDate);
-    }
-    return true; // "all"
-  });
+  useEffect(() => {
+    filterSubmissions(filter, ageFilter, formatFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ageFilter, formatFilter, originalSubmissions]);
 
   return (
-    <div className="container mx-auto py-8 bg-background">
+    <>
       <MainHeader />
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
-        <h1 className="text-3xl font-bold mb-4 md:mb-0">Gallery</h1>
+      <div className="container mx-auto py-8 bg-background">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+          <h1 className="text-3xl font-bold mb-4 md:mb-0">Gallery</h1>
 
-        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-          <Tabs
-            defaultValue="all"
-            className="w-full sm:w-auto"
-            value={activeTab}
-            onValueChange={setActiveTab}
-          >
-            <TabsList>
-              <TabsTrigger value="all">All Submissions</TabsTrigger>
-              <TabsTrigger value="today">Today's Contest</TabsTrigger>
-              <TabsTrigger value="past">Past Contests</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+            <Tabs
+              defaultValue="all"
+              className="w-full sm:w-auto"
+              onValueChange={setActiveTab}
+            >
+              <TabsList>
+                <TabsTrigger value="all">All Submissions</TabsTrigger>
+                <TabsTrigger value="today">Today's Contest</TabsTrigger>
+                <TabsTrigger value="past">Past Contests</TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-          <div className="flex flex-wrap gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Filter className="h-4 w-4" />
-                  {filter === "top-rated"
-                    ? "Top Rated"
-                    : filter === "newest"
-                      ? "Newest"
-                      : "Random"}
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem
-                  onClick={() => filterSubmissions("top-rated")}
-                >
-                  Top Rated
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => filterSubmissions("newest")}>
-                  Newest
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => filterSubmissions("random")}>
-                  Random
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  {ageFilter === "all"
-                    ? "All Ages"
-                    : ageFilter === "child"
-                      ? "Children"
-                      : ageFilter === "teen"
-                        ? "Teens"
-                        : ageFilter === "adult"
-                          ? "Adults"
-                          : "Seniors"}
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => filterByAge("all")}>
-                  All Ages
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => filterByAge("child")}>
-                  Children (under 13)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => filterByAge("teen")}>
-                  Teens (13-17)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => filterByAge("adult")}>
-                  Adults (18+)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => filterByAge("senior")}>
-                  Seniors (65+)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
-                  {formatFilter === "all"
-                    ? "All Formats"
-                    : formatFilter === "traditional"
-                      ? "Traditional"
-                      : "Digital"}
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => filterByFormat("all")}>
-                  All Formats
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => filterByFormat("traditional")}>
-                  Traditional
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => filterByFormat("digital")}>
-                  Digital
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </div>
-
-      {fetchingSubmissions || isLoading ? (
-        <div className="flex flex-col items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-          <p className="text-muted-foreground">Loading submissions...</p>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredSubmissions.map((submission) => (
-              <Card
-                id={`submission-${submission.id}`}
-                key={submission.id}
-                className="overflow-hidden hover:shadow-lg transition-shadow scroll-mt-8"
-              >
-                <div className="relative aspect-square overflow-hidden">
-                  <img
-                    src={submission.imageUrl}
-                    alt={`Artwork by ${submission.artistName}`}
-                    className="object-cover w-full h-full transition-transform hover:scale-105"
-                  />
-                  {/* Overlay with quick stats */}
-                  <div className="absolute top-2 right-2 bg-black/70 text-white px-2 py-1 rounded-md text-xs flex items-center gap-1">
-                    {activeTab === "today" ? (
-                      <Star className="h-3 w-3" />
-                    ) : (
-                      <Heart className="h-3 w-3" />
-                    )}
-                    {submission.voteCount}
-                  </div>
-                </div>
-                <CardContent className="p-4 space-y-3">
-                  {/* Artist name and voting section */}
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg truncate">
-                        {submission.artistName}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(submission.submissionDate).toLocaleDateString(
-                          "en-US",
-                          {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          },
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="p-1 h-auto"
-                        onClick={() => handleVote(submission.id, submission.hasVoted)}
-                        disabled={isVoting}
-                        title={
-                          submission.hasVoted
-                            ? "Remove vote"
-                            : "Vote for this artwork"
-                        }
-                      >
-                        {isVoting ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : activeTab === "today" ? (
-                          <Star
-                            className={`h-5 w-5 transition-colors ${submission.hasVoted ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground hover:text-yellow-400"}`}
-                          />
-                        ) : (
-                          <Heart
-                            className={`h-5 w-5 transition-colors ${submission.hasVoted ? "fill-red-500 text-red-500" : "text-muted-foreground hover:text-red-500"}`}
-                          />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="p-1 h-auto"
-                        onClick={() => handleShare(submission)}
-                        title="Share this artwork"
-                      >
-                        {copiedSubmissionId === submission.id ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <Share2 className="h-4 w-4 text-muted-foreground hover:text-primary transition-colors" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Submission details */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Votes:</span>
-                      <span className="font-medium">
-                        {submission.voteCount}
-                      </span>
-                    </div>
-
-                    {submission.ageGroup && (
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          Age Group:
-                        </span>
-                        <span className="font-medium capitalize">
-                          {submission.ageGroup === "child"
-                            ? "Child (Under 13)"
-                            : submission.ageGroup === "teen"
-                              ? "Teen (13-17)"
-                              : submission.ageGroup === "adult"
-                                ? "Adult (18+)"
-                                : "Senior (65+)"}
-                        </span>
-                      </div>
-                    )}
-
-                    {submission.contestType && (
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Medium:</span>
-                        <span className="font-medium capitalize">
-                          {submission.contestType === "traditional"
-                            ? "Traditional"
-                            : "Digital"}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Tags/badges */}
-                  <div className="flex flex-wrap gap-1 pt-2">
-                    {submission.ageGroup && (
-                      <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
-                        {submission.ageGroup === "child"
-                          ? "Child"
-                          : submission.ageGroup === "teen"
-                            ? "Teen"
-                            : submission.ageGroup === "adult"
-                              ? "Adult"
-                              : "Senior"}
-                      </span>
-                    )}
-                    {submission.contestType && (
-                      <span className="text-xs bg-secondary/50 text-secondary-foreground px-2 py-1 rounded-full font-medium">
-                        {submission.contestType === "traditional"
-                          ? "Traditional"
-                          : "Digital"}
-                      </span>
-                    )}
-                    {submission.hasVoted && (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
-                        Voted
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {filteredSubmissions.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <p className="text-muted-foreground text-lg">
-                No submissions found
-              </p>
-              <Button variant="outline" className="mt-4">
-                Be the first to submit!
-              </Button>
+            <div className="flex flex-wrap gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="flex items-center gap-2">
+                    <Filter className="h-4 w-4" />
+                    {filter === "top-rated"
+                      ? "Top Rated"
+                      : filter === "newest"
+                        ? "Newest"
+                        : "Random"}
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem
+                    onClick={() => filterSubmissions("top-rated")}
+                  >
+                    Top Rated
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => filterSubmissions("newest")}>Newest</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => filterSubmissions("random")}>Random</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-          )}
-        </>
-      )}
-    </div>
+          </div>
+        </div>
+
+        {(fetchingSubmissions || isLoading) ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            <p className="text-muted-foreground">Loading submissions...</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {gallerySubmissions.map((submission) => (
+                <Card
+                  key={submission.id}
+                  className="overflow-hidden hover:shadow-lg transition-shadow"
+                  id={`submission-${submission.id}`}
+                >
+                  <div className="relative aspect-square overflow-hidden">
+                    <img
+                      src={submission.imageUrl}
+                      alt={`Artwork by ${submission.artistName}`}
+                      className="object-cover w-full h-full transition-transform hover:scale-105"
+                    />
+                    {/* Overlay with quick stats */}
+                    <div className="absolute top-2 right-2 bg-black/70 text-white px-2 py-1 rounded-md text-xs flex items-center gap-1">
+                      {activeTab === "today" ? (
+                        <Star className="h-3 w-3" />
+                      ) : (
+                        <Heart className="h-3 w-3" />
+                      )}
+                      {submission.voteCount}
+                    </div>
+                  </div>
+                  <CardContent className="p-4 space-y-3">
+                    {/* Artist name and voting section */}
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg truncate">
+                          {submission.artistName}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(submission.submissionDate).toLocaleDateString(
+                            "en-US",
+                            {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            },
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="p-1 h-auto"
+                          onClick={() => handleVote(submission.id)}
+                          disabled={isVoting}
+                          title={
+                            submission.hasVoted
+                              ? "Remove vote"
+                              : "Vote for this artwork"
+                          }
+                        >
+                          {isVoting ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : activeTab === "today" ? (
+                            <Star
+                              className={`h-5 w-5 transition-colors ${submission.hasVoted ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground hover:text-yellow-400"}`}
+                            />
+                          ) : (
+                            <Heart
+                              className={`h-5 w-5 transition-colors ${submission.hasVoted ? "fill-red-500 text-red-500" : "text-muted-foreground hover:text-red-500"}`}
+                            />
+                          )}
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="p-1 h-auto"
+                              title="Share this artwork"
+                            >
+                              {copiedSubmissionId === submission.id ? (
+                                <Check className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <Share2 className="h-4 w-4 text-muted-foreground hover:text-primary transition-colors" />
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handleShare(submission)}
+                            >
+                              <Copy className="h-4 w-4 mr-2" />
+                              Copy Link
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                handleSocialShare("instagram", submission)
+                              }
+                            >
+                              <Instagram className="h-4 w-4 mr-2" />
+                              Share to Instagram
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                handleSocialShare("tiktok", submission)
+                              }
+                            >
+                              <Music className="h-4 w-4 mr-2" />
+                              Share to TikTok
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+
+                    {/* Submission details */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Votes:</span>
+                        <span className="font-medium">
+                          {submission.voteCount}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Tags/badges */}
+                    <div className="flex flex-wrap gap-1 pt-2">
+                      {submission.hasVoted && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                          Voted
+                        </span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {gallerySubmissions.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12">
+                <p className="text-muted-foreground text-lg">
+                  No submissions found
+                </p>
+                <Button variant="outline" className="mt-4">
+                  Be the first to submit!
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <MainFooter />
+    </>
   );
 };
 

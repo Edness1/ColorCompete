@@ -46,8 +46,18 @@ class EmailAutomationService {
     
     switch (automation.triggerType) {
       case 'contest_announcement':
-        // Event-triggered, no cron schedule needed
-        console.log(`Contest announcement automation: ${automation.name} - event triggered`);
+        // Run daily at specified time
+        if (!automation.schedule.time) {
+          console.error(`Missing schedule time for contest_announcement automation: ${automation.name}`);
+          return;
+        }
+        try {
+          const [hour, minute] = automation.schedule.time.split(':');
+          cronExpression = `${minute} ${hour} * * *`;
+        } catch (error) {
+          console.error(`Invalid time format for automation ${automation.name}:`, automation.schedule.time);
+          return;
+        }
         break;
       case 'voting_results':
         // Run daily at specified time
@@ -211,8 +221,8 @@ class EmailAutomationService {
           unsubscribeUrl: `${process.env.FRONTEND_URL}/unsubscribe?userId=${user._id}`
         };
 
-        const subject = this.replaceTemplateVariables(automation.emailTemplate.subject, templateData);
-        const htmlContent = this.replaceTemplateVariables(automation.emailTemplate.htmlContent, templateData);
+        const subject = emailService.replaceTemplateVariables(automation.emailTemplate.subject, templateData);
+        const htmlContent = emailService.replaceTemplateVariables(automation.emailTemplate.htmlContent, templateData);
 
         await emailService.sendEmail({
           to: { userId: user._id, email: user.email },
@@ -363,8 +373,8 @@ class EmailAutomationService {
           unsubscribeUrl: `${process.env.FRONTEND_URL}/unsubscribe?userId=${user._id}`
         };
 
-        const subject = this.replaceTemplateVariables(automation.emailTemplate.subject, userTemplateData);
-        const htmlContent = this.replaceTemplateVariables(automation.emailTemplate.htmlContent, userTemplateData);
+        const subject = emailService.replaceTemplateVariables(automation.emailTemplate.subject, userTemplateData);
+        const htmlContent = emailService.replaceTemplateVariables(automation.emailTemplate.htmlContent, userTemplateData);
 
         await emailService.sendEmail({
           to: { userId: user._id, email: user.email },
@@ -430,8 +440,8 @@ class EmailAutomationService {
           unsubscribeUrl: `${process.env.FRONTEND_URL}/unsubscribe?userId=${user._id}`
         };
 
-        const subject = this.replaceTemplateVariables(automation.emailTemplate.subject, userTemplateData);
-        const htmlContent = this.replaceTemplateVariables(automation.emailTemplate.htmlContent, userTemplateData);
+        const subject = emailService.replaceTemplateVariables(automation.emailTemplate.subject, userTemplateData);
+        const htmlContent = emailService.replaceTemplateVariables(automation.emailTemplate.htmlContent, userTemplateData);
 
         await emailService.sendEmail({
           to: { userId: user._id, email: user.email },
@@ -489,8 +499,8 @@ class EmailAutomationService {
         websiteUrl: process.env.FRONTEND_URL
       };
 
-      const subject = this.replaceTemplateVariables(automation.emailTemplate.subject, templateData);
-      const htmlContent = this.replaceTemplateVariables(automation.emailTemplate.htmlContent, templateData);
+      const subject = emailService.replaceTemplateVariables(automation.emailTemplate.subject, templateData);
+      const htmlContent = emailService.replaceTemplateVariables(automation.emailTemplate.htmlContent, templateData);
 
       await emailService.sendEmail({
         to: { userId: submission.user._id, email: submission.user.email },
@@ -707,8 +717,8 @@ class EmailAutomationService {
         website_url: process.env.FRONTEND_URL
       };
 
-      const subject = this.replaceTemplateVariables(automation.emailTemplate.subject, templateData);
-      const htmlContent = this.replaceTemplateVariables(automation.emailTemplate.htmlContent, templateData);
+      const subject = emailService.replaceTemplateVariables(automation.emailTemplate.subject, templateData);
+      const htmlContent = emailService.replaceTemplateVariables(automation.emailTemplate.htmlContent, templateData);
 
       await emailService.sendEmail({
         to: { userId: winner._id, email: winner.email },
@@ -752,8 +762,8 @@ class EmailAutomationService {
           website_url: process.env.FRONTEND_URL
         };
 
-        const subject = this.replaceTemplateVariables(participantAutomation.emailTemplate.subject, templateData);
-        const htmlContent = this.replaceTemplateVariables(participantAutomation.emailTemplate.htmlContent, templateData);
+        const subject = emailService.replaceTemplateVariables(participantAutomation.emailTemplate.subject, templateData);
+        const htmlContent = emailService.replaceTemplateVariables(participantAutomation.emailTemplate.htmlContent, templateData);
 
         await emailService.sendEmail({
           to: { userId: participant._id, email: participant.email },
