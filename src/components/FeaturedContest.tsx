@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Download, Trophy, Upload } from "lucide-react";
+import { Clock, Download, Eye, Trophy, Upload } from "lucide-react";
 import DownloadConfirmation from "./DownloadConfirmation";
 import SubmissionButton from "./SubmissionButton";
 import { toast } from "@/components/ui/use-toast";
@@ -15,6 +15,7 @@ import { useContestAnalytics } from "@/hooks/useContestAnalytics";
 import { API_URL } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 
 interface Challenge {
   _id: string;
@@ -34,9 +35,11 @@ interface Challenge {
 }
 
 const FeaturedContest = () => {
+  let artworkTitle = "Today's Line Art Challenge";
   const [latestContest, setLatestContest] = useState<Challenge | null>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [remainingTime, setRemainingTime] = useState<string>("--:--:--");
   const [submissionCount, setSubmissionCount] = useState<number>(0);
   const { trackDownload } = useContestAnalytics();
@@ -69,30 +72,21 @@ const FeaturedContest = () => {
       // Combine date and time to create full datetime
       const startDate = latestContest.startDate.split('T')[0]; // Get just the date part
       const endDate = latestContest.endDate.split('T')[0]; // Get just the date part
-      
       const start = new Date(`${startDate}T${latestContest.startTime}`);
       const end = new Date(`${endDate}T${latestContest.endTime}`);
       const now = new Date();
-      
       // If end time is before start time, assume it's the next day
       if (end.getTime() <= start.getTime()) {
         end.setDate(end.getDate() + 1);
       }
-      
       // Time remaining until end
-      const remaining = end.getTime() - now.getTime();
-
+      let remaining = end.getTime() - now.getTime();
       if (remaining <= 0) return "00:00:00";
-
-      const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-      const secs = Math.floor((remaining % (1000 * 60)) / 1000);
-
-      if (days > 0) {
-        return `${days}d ${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-      }
-
+      // Always show as HH:MM:SS, even if more than 24 hours remain
+      const totalSeconds = Math.floor(remaining / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const mins = Math.floor((totalSeconds % 3600) / 60);
+      const secs = totalSeconds % 60;
       return (
         hours.toString().padStart(2, "0") +
         ":" +
@@ -212,13 +206,6 @@ const FeaturedContest = () => {
                   <CardTitle className="text-2xl font-bold">
                     {title}
                   </CardTitle>
-                  <div className="mt-1">
-                    <Badge variant="outline" className="text-xs">
-                      {contestType === "traditional"
-                        ? "Traditional Contest"
-                        : "Digital Contest"}
-                    </Badge>
-                  </div>
                 </div>
                 <Badge variant="secondary" className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
@@ -235,13 +222,6 @@ const FeaturedContest = () => {
                   onMouseEnter={() => setIsHovering(true)}
                   onMouseLeave={() => setIsHovering(false)}
                 >
-                  <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-md z-10">
-                    {artStyle === "anime"
-                      ? "Anime Line Art"
-                      : artStyle === "matisse"
-                        ? "Matisse Line Art"
-                        : "Daily Coloring Challenge"}
-                  </div>
                   <img
                     src={displayImage}
                     alt="Daily coloring challenge"
@@ -253,15 +233,12 @@ const FeaturedContest = () => {
                   {isHovering && (
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity duration-300">
                       <Button
-                        onClick={() => {
-                          handleDownload();
-                          setShowDownloadModal(true);
-                        }}
+                        onClick={() => setShowViewModal(true)}
                         size="sm"
                         className="gap-1"
                       >
-                        <Download className="h-4 w-4" />
-                        Download
+                        <Eye className="h-4 w-4" />
+                        View
                       </Button>
                     </div>
                   )}
@@ -294,14 +271,9 @@ const FeaturedContest = () => {
                   <Download className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-medium">
-                    Step 1:{" "}
-                    {contestType === "traditional" ? "Download" : "Get Theme"}
-                  </h3>
+                  <h3 className="font-medium">Step 1: Download</h3>
                   <p className="text-sm text-muted-foreground">
-                    {contestType === "traditional"
-                      ? "Download today's line art to your device"
-                      : "Check today's theme for your digital creation"}
+                    Download today's line art to your device
                   </p>
                 </div>
               </div>
@@ -315,17 +287,35 @@ const FeaturedContest = () => {
                     stroke="currentColor"
                     strokeWidth="2"
                   >
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
+                    <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" />
                   </svg>
                 </div>
                 <div>
-                  <h3 className="font-medium">
-                    Step 2: {contestType === "traditional" ? "Color" : "Create"}
-                  </h3>
+                  <h3 className="font-medium">Step 2: Print</h3>
                   <p className="text-sm text-muted-foreground">
-                    {contestType === "traditional"
-                        ? "Use your favorite tools to color the artwork"
-                        : "Create an original digital artwork based on the theme"}
+                    Print today's line art on a printer
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="bg-primary/10 p-2 rounded-full">
+                  <svg
+                    className="h-5 w-5 text-primary"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-medium">Step 3: Color</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Color today's line art challenge with any tool you like,
+                    crayon, color pencil, water color, pastel, anything you
+                    wish.
                   </p>
                 </div>
               </div>
@@ -335,7 +325,7 @@ const FeaturedContest = () => {
                   <Upload className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-medium">Step 3: Submit</h3>
+                  <h3 className="font-medium">Step 4: Submit</h3>
                   <p className="text-sm text-muted-foreground">
                     Upload your colored artwork for voting
                   </p>
@@ -347,7 +337,7 @@ const FeaturedContest = () => {
                   <Trophy className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-medium">Step 4: Win</h3>
+                  <h3 className="font-medium">Step 5: Win</h3>
                   <p className="text-sm text-muted-foreground">
                     Top voted submission wins the daily prize
                   </p>
@@ -380,6 +370,43 @@ const FeaturedContest = () => {
           </div>
         </div>
       </div>
+
+      {/* View Artwork Modal */}
+      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+  <DialogContent className="max-w-4xl max-h-[90vh] p-0 overflow-y-auto">
+          <DialogHeader className="p-6 pb-0">
+            <DialogTitle className="text-2xl font-bold">
+              {artworkTitle}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-6">
+            <div className="aspect-square overflow-hidden rounded-lg mb-4">
+              <img
+                src={displayImage}
+                alt={artworkTitle}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex gap-3 pb-6">
+              <Button
+                onClick={() => {
+                  handleDownload();
+                  setShowViewModal(false);
+                }}
+                className="flex-1 gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Download Line Art
+              </Button>
+              <SubmissionButton
+                contestType={contestType}
+                variant="outline"
+                className="flex-1"
+              />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Download Confirmation Modal */}
       {showDownloadModal && (

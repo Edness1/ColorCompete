@@ -68,8 +68,7 @@ const Home = () => {
               Daily Coloring Challenge
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Download today's line art, color it your way, and submit for a
-              chance to win prizes!
+              Download today's line art, color it your way, and submit it within 24 hours for a chance to win prizes! 
             </p>
           </div>
 
@@ -319,8 +318,8 @@ const Home = () => {
             contests. Show off your skills and win amazing prizes!
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Button size="lg">Start Coloring Today</Button>
-            <Button variant="outline" size="lg">
+            <Button size="lg" onClick={() => window.location.href = '/pricing'}>Start Coloring Today</Button>
+            <Button variant="outline" size="lg" onClick={() => window.location.href = '/about'}>
               Learn More
             </Button>
           </div>
