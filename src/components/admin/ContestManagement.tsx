@@ -25,17 +25,49 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { API_URL } from "@/lib/utils";
-import axios from "axios"; // Add this import
+import axios from "axios";
 
-const formSchema = z.object({
-  title: z.string().min(5, "Title must be at least 5 characters"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
-  lineArt: z.string().optional(), // Make lineArt optional
-  startTime: z.string().min(1, "Start time is required"), // added
-  endTime: z.string().min(1, "End time is required"),     // added
-  contestType: z.enum(["traditional", "digital"]),
-  status: z.enum(["draft", "scheduled", "active", "completed"]),
-});
+const formSchema = z
+  .object({
+    title: z.string().min(5, "Title must be at least 5 characters"),
+    description: z.string().min(10, "Description must be at least 10 characters"),
+    lineArt: z.string().optional(),
+    startDate: z.string().min(1, "Start date is required"),
+    // times are enforced automatically to 11:00 UTC / +24h — not user-entered
+    status: z.enum(["draft", "scheduled", "active", "completed"]),
+  })
+  .superRefine((data, ctx) => {
+    // Force start at 11:00 UTC and end 24 hours later
+    const start = new Date(`${data.startDate}T11:00:00Z`);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+
+    if (isNaN(start.getTime())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Invalid start date",
+        path: ["startDate"],
+      });
+    }
+
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start >= end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "End must be after start",
+        path: ["startDate"],
+      });
+    }
+
+    if (data.status === "scheduled" && !isNaN(start.getTime())) {
+      const now = new Date();
+      if (start <= now) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Scheduled start must be in the future",
+          path: ["startDate"],
+        });
+      }
+    }
+  });
 
 interface ContestManagementProps {
   onSuccess?: () => void;
@@ -47,14 +79,13 @@ interface Contest {
   title: string;
   description: string;
   lineArt: string;
-  startTime: string;
-  endTime: string;
-  contestType: "traditional" | "digital";
+  startDate?: string; // ISO datetime (UTC)
+  endDate?: string; // ISO datetime (UTC)
   status: "draft" | "scheduled" | "active" | "completed";
 }
 
-const CLOUDINARY_UPLOAD_PRESET = "cewqtwou"; // <-- set this
-const CLOUDINARY_CLOUD_NAME = "dwnqwem6e"; // <-- set this
+const CLOUDINARY_UPLOAD_PRESET = "cewqtwou";
+const CLOUDINARY_CLOUD_NAME = "dwnqwem6e";
 
 export default function ContestManagement({
   onSuccess,
@@ -65,29 +96,38 @@ export default function ContestManagement({
   const [lineArtPreview, setLineArtPreview] = useState<string | null>(null);
   const { toast } = useToast();
 
+  const today = new Date().toISOString().slice(0, 10);
+
+  // parse ISO datetime (UTC) into date for inputs
+  const parseIsoToDate = (iso?: string) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  };
+
+  const initialStart = parseIsoToDate(editingContest?.startDate);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: editingContest?.title || "",
       description: editingContest?.description || "",
       lineArt: editingContest?.lineArt || "",
-      startTime: editingContest?.startTime || "09:00",
-      endTime: editingContest?.endTime || "17:00",
-      contestType: editingContest?.contestType || "traditional",
+      startDate: initialStart || (editingContest?.startDate ? String(editingContest.startDate).slice(0, 10) : today),
       status: editingContest?.status || "draft",
     },
   });
 
-  // Update form values when editingContest changes
   useEffect(() => {
     if (editingContest) {
+      const parsedStart = parseIsoToDate(editingContest.startDate);
+
       form.reset({
         title: editingContest.title,
         description: editingContest.description,
         lineArt: editingContest.lineArt,
-        startTime: editingContest.startTime,
-        endTime: editingContest.endTime,
-        contestType: editingContest.contestType,
+        startDate: parsedStart || editingContest.startDate || today,
         status: editingContest.status,
       });
       setLineArtPreview(editingContest.lineArt);
@@ -96,9 +136,7 @@ export default function ContestManagement({
         title: "",
         description: "",
         lineArt: "",
-        startTime: "09:00",
-        endTime: "17:00",
-        contestType: "traditional",
+        startDate: today,
         status: "draft",
       });
       setLineArtPreview(null);
@@ -126,29 +164,54 @@ export default function ContestManagement({
       onChange(data.secure_url);
       setLineArtPreview(data.secure_url);
     } catch (err) {
-      // Optionally show a toast or error message
+      console.error("Line art upload error:", err);
+      toast({
+        title: "Upload error",
+        description: "Failed to upload image.",
+        variant: "destructive",
+      });
     }
     setUploading(false);
   };
 
+  // watch startDate to show computed start/end info in the UI
+  const watchedStartDate = form.watch("startDate");
+  const computeStartEnd = (dateStr?: string) => {
+    if (!dateStr) return { startISO: "", endISO: "", startDisplay: "", endDisplay: "" };
+    const start = new Date(`${dateStr}T11:00:00Z`);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    const isoStart = start.toISOString();
+    const isoEnd = end.toISOString();
+    const startDisplay = `${dateStr} 11:00 UTC`;
+    const endDisplay = `${end.toISOString().slice(0, 10)} 11:00 UTC`;
+    return { startISO: isoStart, endISO: isoEnd, startDisplay, endDisplay };
+  };
+  const { startISO: computedStartISO, endISO: computedEndISO, startDisplay, endDisplay } = computeStartEnd(watchedStartDate);
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
+      // Force start at 11:00 UTC and end 24 hours later
+      const startDateTime = new Date(`${values.startDate}T11:00:00Z`);
+      const endDateTime = new Date(startDateTime.getTime() + 24 * 60 * 60 * 1000);
+
       // Prepare the data object
-      const contestData = {
+      const contestData: any = {
         title: values.title,
         description: values.description,
-        startTime: values.startTime,
-        endTime: values.endTime,
-        contestType: values.contestType,
+        // include time strings for compatibility if the server expects them
+        startTime: "11:00",
+        endTime: "11:00",
+        startDate: startDateTime.toISOString(),
+        endDate: endDateTime.toISOString(),
+        contestType: (editingContest as any)?.contestType || "traditional",
         status: values.status,
-        startDate: new Date(), // Add current date as start date
-        endDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Add end date (24 hours from now)
-        ...(values.lineArt && { lineArt: values.lineArt }), // Only include lineArt if it's provided
+        ...(values.lineArt && { lineArt: values.lineArt }),
       };
 
+      console.log("Submitting contest:", contestData);
+
       if (editingContest) {
-        // Update existing contest
         await axios.put(API_URL + `/api/challenges/${editingContest._id}`, contestData);
 
         toast({
@@ -156,37 +219,34 @@ export default function ContestManagement({
           description: `${values.title} has been successfully updated.`,
         });
       } else {
-        // Create new contest - lineArt is required for new contests
         if (!values.lineArt) {
           toast({
             title: "Error",
             description: "Line art image is required for new contests.",
             variant: "destructive",
           });
+          setIsSubmitting(false);
           return;
         }
-        
+
         await axios.post(API_URL + "/api/challenges", contestData);
 
         toast({
           title: "Contest created",
           description: `${values.title} has been successfully created.`,
         });
-      }
 
-      // Reset form only if creating new contest
-      if (!editingContest) {
         form.reset();
         setLineArtPreview(null);
       }
 
-      // Call onSuccess callback if provided
       if (onSuccess) onSuccess();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving contest:", error);
+      const serverMsg = error?.response?.data || error?.message;
       toast({
         title: "Error",
-        description: `Failed to ${editingContest ? 'update' : 'create'} contest. Please try again.`,
+        description: `Failed to ${editingContest ? "update" : "create"} contest. ${serverMsg ? String(serverMsg) : ""}`,
         variant: "destructive",
       });
     } finally {
@@ -197,7 +257,7 @@ export default function ContestManagement({
   return (
     <div className="bg-background p-6 rounded-lg border">
       <h2 className="text-2xl font-bold mb-6">
-        {editingContest ? 'Edit Contest' : 'Create New Contest'}
+        {editingContest ? "Edit Contest" : "Create New Contest"}
       </h2>
 
       <Form {...form}>
@@ -211,9 +271,7 @@ export default function ContestManagement({
                 <FormControl>
                   <Input placeholder="Enter contest title" {...field} />
                 </FormControl>
-                <FormDescription>
-                  Give your contest a catchy, descriptive title
-                </FormDescription>
+                <FormDescription>Give your contest a catchy, descriptive title</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -226,15 +284,9 @@ export default function ContestManagement({
               <FormItem>
                 <FormLabel>Description</FormLabel>
                 <FormControl>
-                  <Textarea
-                    placeholder="Describe the contest theme and guidelines"
-                    className="min-h-[120px]"
-                    {...field}
-                  />
+                  <Textarea placeholder="Describe the contest theme and guidelines" className="min-h-[120px]" {...field} />
                 </FormControl>
-                <FormDescription>
-                  Provide clear instructions and inspiration for participants
-                </FormDescription>
+                <FormDescription>Provide clear instructions and inspiration for participants</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -248,11 +300,7 @@ export default function ContestManagement({
                 <FormLabel>Line Art Image</FormLabel>
                 <FormControl>
                   <>
-                    <Input 
-                      placeholder="Enter image URL (optional)" 
-                      {...field}
-                      value={field.value || ''}
-                    />
+                    <Input placeholder="Enter image URL (optional)" {...field} value={field.value || ""} />
                     <div className="flex items-center gap-2 mt-2">
                       <input
                         type="file"
@@ -260,7 +308,7 @@ export default function ContestManagement({
                         id="lineart-upload"
                         style={{ display: "none" }}
                         disabled={uploading}
-                        onChange={e => handleLineArtUpload(e, field.onChange)}
+                        onChange={(e) => handleLineArtUpload(e, field.onChange)}
                       />
                       <Button
                         type="button"
@@ -274,18 +322,13 @@ export default function ContestManagement({
                     </div>
                     {lineArtPreview && (
                       <div className="mt-4">
-                        <img
-                          src={lineArtPreview}
-                          alt="Line Art Preview"
-                          className="w-full max-h-64 object-contain border rounded"
-                        />
+                        <img src={lineArtPreview} alt="Line Art Preview" className="w-full max-h-64 object-contain border rounded" />
                       </div>
                     )}
                   </>
                 </FormControl>
                 <FormDescription>
-                  URL to the line art image for traditional contests or
-                  reference image for digital contests (optional when updating)
+                  URL to the line art image for traditional contests or reference image for digital contests (optional when updating)
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -295,43 +338,11 @@ export default function ContestManagement({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <FormField
               control={form.control}
-              name="contestType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contest Type</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select contest type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="traditional">
-                        Traditional (Color the provided line art)
-                      </SelectItem>
-                      <SelectItem value="digital">
-                        Digital (Create original artwork based on theme)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
               name="status"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Status</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select status" />
@@ -353,30 +364,27 @@ export default function ContestManagement({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <FormField
               control={form.control}
-              name="startTime"
+              name="startDate"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Start Time</FormLabel>
+                  <FormLabel>Start Date (starts at 11:00 UTC)</FormLabel>
                   <FormControl>
-                    <Input type="time" {...field} />
+                    <Input type="date" {...field} />
                   </FormControl>
+                  <FormDescription>The contest will start at 11:00 UTC on the selected date and end 24 hours later.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="endTime"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>End Time</FormLabel>
-                  <FormControl>
-                    <Input type="time" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+
+            <FormItem>
+              <FormLabel>Computed Start / End (read-only)</FormLabel>
+              <div className="p-3 rounded border bg-muted">
+                <div className="text-sm">Start: {startDisplay || "—"}</div>
+                <div className="text-sm">End: {endDisplay || "—"}</div>
+                <div className="text-xs text-muted-foreground mt-2">Times are fixed at 11:00 UTC and cannot be edited.</div>
+              </div>
+            </FormItem>
           </div>
 
           <div className="pt-4">
@@ -384,10 +392,12 @@ export default function ContestManagement({
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {editingContest ? 'Updating Contest...' : 'Creating Contest...'}
+                  {editingContest ? "Updating Contest..." : "Creating Contest..."}
                 </>
+              ) : editingContest ? (
+                "Update Contest"
               ) : (
-                editingContest ? 'Update Contest' : 'Create Contest'
+                "Create Contest"
               )}
             </Button>
           </div>

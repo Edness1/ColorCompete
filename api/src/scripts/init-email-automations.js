@@ -1,8 +1,13 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
+const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/colorcompete';
+const collectionName = process.env.EMAIL_AUTOMATIONS_COLLECTION || 'email_automations';
+console.log(`[init-email-automations] Using MongoDB URI: ${mongoUri}`);
+console.log(`[init-email-automations] Target collection: ${collectionName}`);
+
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/colorcompete', {
+mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
@@ -15,7 +20,9 @@ const emailAutomationSchema = new mongoose.Schema({
   triggerType: {
     type: String,
     enum: ['daily_winner', 'monthly_winner', 'winner_reward', 'welcome', 'subscription_expired', 'contest_announcement', 'voting_results', 'comments_feedback', 'weekly_summary'],
-    required: true
+    required: true,
+    index: true,
+    unique: true
   },
   emailTemplate: {
     subject: { type: String, required: true },
@@ -37,6 +44,8 @@ const emailAutomationSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
+}, {
+  collection: collectionName
 });
 
 const EmailAutomation = mongoose.model('EmailAutomation', emailAutomationSchema);
@@ -46,8 +55,12 @@ const emailAutomations = [
   {
     name: 'Contest Announcements',
     description: 'Automatically notify users about new daily contests and challenges',
-    isActive: false,
+    isActive: true,
     triggerType: 'contest_announcement',
+    schedule: {
+      time: '11:00',
+      timezone: 'UTC'
+    },
     emailTemplate: {
       subject: '🎨 New Contest Alert: {{challenge_title}}',
       htmlContent: `
@@ -233,31 +246,29 @@ const emailAutomations = [
 async function initializeEmailAutomations() {
   try {
     console.log('Connecting to database...');
-    
-    // Check if automations already exist
+    await mongoose.connection.asPromise();
+    console.log(`Connected to DB: ${mongoose.connection.name}`);
+
+    // Upsert by triggerType to avoid duplicates across runs
     for (const automation of emailAutomations) {
-      const existing = await EmailAutomation.findOne({ triggerType: automation.triggerType });
-      
-      if (existing) {
-        console.log(`✓ Email automation "${automation.name}" already exists`);
-      } else {
-        await EmailAutomation.create(automation);
-        console.log(`✓ Created email automation: "${automation.name}"`);
-      }
+      const res = await EmailAutomation.findOneAndUpdate(
+        { triggerType: automation.triggerType },
+        { $set: automation, $currentDate: { updatedAt: true } },
+        { upsert: true, new: true }
+      );
+      console.log(`✓ Ensured email automation: "${res.name}" (active: ${res.isActive})`);
     }
-    
+
+    const count = await EmailAutomation.countDocuments({});
+    console.log(`\nTotal automations in ${collectionName}: ${count}`);
+    const sample = await EmailAutomation.find({}, { name: 1, triggerType: 1, isActive: 1, schedule: 1 }).lean();
+    console.table(sample);
+
     console.log('\n🎉 Email automation initialization complete!');
-    console.log('\nThe following email automations are now available:');
-    console.log('1. Contest Announcements - New daily contests and challenges');
-    console.log('2. Voting Results - When voting ends and winners are announced');
-    console.log('3. Comments & Feedback - When someone comments on submissions');
-    console.log('4. Weekly Summary - Weekly digest of user activity');
-    console.log('\nTo activate these automations, go to Admin Dashboard → Email Marketing → Automations');
-    
   } catch (error) {
     console.error('Error initializing email automations:', error);
   } finally {
-    mongoose.connection.close();
+    await mongoose.connection.close();
   }
 }
 
