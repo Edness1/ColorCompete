@@ -4,9 +4,10 @@
   "description": "A Node.js Express API with MongoDB for managing challenges, submissions, users, and badges.",
   "main": "src/app.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "nodemon src/app.js",
-    "init-email-automations": "node init-email-automations.js"
+  "start": "node src/app.js",
+  "dev": "nodemon src/app.js",
+  "init-email-automations": "node init-email-automations.js",
+  "migrate:created-at": "node src/scripts/migrate-created-at-to-date.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

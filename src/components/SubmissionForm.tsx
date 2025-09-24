@@ -163,17 +163,8 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       console.log("Starting submission process...");
       console.log("Current remaining submissions:", remainingSubmissions);
       console.log("User ID:", user._id);
-      
-      // Deduct a submission credit BEFORE submitting if user has credits
-      let shouldProceed = true;
-      if (remainingSubmissions > 0) {
-        console.log("Attempting to deduct submission...");
-        shouldProceed = await deductSubmission();
-        console.log("Deduction result:", shouldProceed);
-        if (!shouldProceed) {
-          throw new Error("Failed to process submission credit. Please try again.");
-        }
-      } else {
+      // Server now handles atomic decrement of remaining submissions.
+      if (remainingSubmissions <= 0) {
         console.log("No remaining submissions, should redirect to payment");
         setShowPaymentPrompt(true);
         setIsSubmitting(false);
@@ -206,6 +197,9 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
         const errorData = await res.json();
         throw new Error(errorData.message || "Failed to submit artwork");
       }
+
+      // Refresh subscription (server already decremented credit)
+      await refreshSubscriptionData();
 
       if (onSubmit) {
         await onSubmit({
@@ -291,9 +285,12 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent style={{ maxHeight: "90vh", overflowY: "auto" }} className="sm:max-w-[800px] bg-background">
+      <DialogContent
+        style={{ maxHeight: "90vh", overflowY: "auto" }}
+        className="w-[92vw] sm:w-full sm:max-w-[800px] bg-background p-4 sm:p-6 overflow-x-hidden"
+      >
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-center">
+          <DialogTitle className="text-xl sm:text-2xl md:text-3xl font-bold text-center leading-tight break-words">
             Submit Your Colored Artwork
           </DialogTitle>
           {user && !isLoadingSubscription && (
@@ -477,7 +474,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
 
       {/* Confirmation Dialog */}
       <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="w-[90vw] sm:w-full sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Confirm Submission</DialogTitle>
           </DialogHeader>
@@ -492,10 +489,6 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
                 <li>
                   <span className="text-muted-foreground">Age Group:</span>{" "}
                   {ageGroup.charAt(0).toUpperCase() + ageGroup.slice(1)}
-                </li>
-                <li>
-                  <span className="text-muted-foreground">Contest Format:</span>{" "}
-                  {contestType.charAt(0).toUpperCase() + contestType.slice(1)}
                 </li>
                 <li>
                   <span className="text-muted-foreground">Submission:</span>{" "}
@@ -553,7 +546,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
 
       {/* Payment Dialog */}
       <Dialog open={showPaymentPrompt} onOpenChange={setShowPaymentPrompt}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="w-[90vw] sm:w-full sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Out of Submissions</DialogTitle>
           </DialogHeader>

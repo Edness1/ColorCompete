@@ -100,7 +100,22 @@ const Leaderboard = ({}: LeaderboardProps) => {
   const getActiveLeaderboard = () => {
     switch (activeTab) {
       case "current":
-        return filterEntries(currentLeaders);
+        // Ensure only submissions from the current local calendar day appear.
+        const today = new Date();
+        const isSameLocalDay = (dateStr?: string) => {
+          if (!dateStr) return true; // keep if date missing
+          if (dateStr === "Today") return true;
+          const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return true; // preserve unparseable labels just in case
+          return (
+            d.getFullYear() === today.getFullYear() &&
+            d.getMonth() === today.getMonth() &&
+            d.getDate() === today.getDate()
+          );
+        };
+        return filterEntries(
+          currentLeaders.filter((entry) => isSameLocalDay(entry.date))
+        );
       case "weekly":
         return filterEntries(weeklyLeaders);
       case "monthly":

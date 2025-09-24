@@ -1,28 +1,57 @@
 const Submission = require('../models/Submission');
 const BadgeService = require('../services/badgeService');
 
-// Create a new submission
+// Create a new submission (with server-side subscription deduction)
 exports.createSubmission = async (req, res) => {
+  const session = await Submission.startSession();
+  session.startTransaction();
   try {
-    const submission = new Submission(req.body);
-    await submission.save();
-    
-    // Check and award badges after submission
-    if (submission.user_id) {
+    const payload = req.body;
+    // Basic validation
+    if (!payload.user_id) {
+      throw new Error('Missing user_id');
+    }
+
+    // Attempt to decrement subscription credit if available
+    const Subscription = require('../models/Subscription');
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    // Only decrement if user has a subscription record and credits > 0
+    const subscription = await Subscription.findOneAndUpdate(
+      {
+        userId: String(payload.user_id),
+        month: currentMonth,
+        year: currentYear,
+        remaining_submissions: { $gt: 0 }
+      },
+      { $inc: { remaining_submissions: -1 } },
+      { new: true }
+    ).session(session);
+
+    const submission = await Submission.create([payload], { session });
+    const created = submission[0];
+
+    // Badge processing (non-blocking but inside try for atomic success path)
+    if (created.user_id) {
       try {
-        await BadgeService.checkAndAwardBadges(submission.user_id, 'submission', {
-          submissionId: submission._id,
-          contestId: submission.challenge_id
+        await BadgeService.checkAndAwardBadges(created.user_id, 'submission', {
+          submissionId: created._id,
+          contestId: created.challenge_id
         });
       } catch (badgeError) {
         console.error('Error checking badges after submission:', badgeError);
-        // Don't fail the submission if badge checking fails
       }
     }
-    
-    res.status(201).json(submission);
+
+    await session.commitTransaction();
+    res.status(201).json({ submission: created, subscription });
   } catch (error) {
+    await session.abortTransaction();
     res.status(400).json({ message: error.message });
+  } finally {
+    session.endSession();
   }
 };
 
@@ -206,9 +235,9 @@ function mapToLeaderboardEntry(sub, index) {
 exports.getCurrentLeaderboard = async (req, res) => {
   try {
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const submissions = await Submission.find({ created_at: { $gte: startOfToday, $lte: now } })
-      .lean();
+    // UTC start of today
+    const startOfTodayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    const submissions = await Submission.find({ created_at: { $gte: startOfTodayUTC, $lte: now } }).lean();
     submissions.sort((a, b) => (b.votes?.length || 0) - (a.votes?.length || 0));
     res.json(submissions.map(mapToLeaderboardEntry));
   } catch (error) {
@@ -219,17 +248,11 @@ exports.getCurrentLeaderboard = async (req, res) => {
 // GET /api/submissions/weekly
 exports.getWeeklyLeaderboard = async (req, res) => {
   try {
-    // Get the current date
     const now = new Date();
-    // Get the day of the week (0 = Sunday, 1 = Monday, ...)
-    const dayOfWeek = now.getDay(); // Change to 1 for Monday as start if needed
-    // Calculate the start of the week (Sunday)
-    const startOfWeek = new Date(now);
-    startOfWeek.setHours(0, 0, 0, 0);
-    startOfWeek.setDate(now.getDate() - dayOfWeek);
-
-    const submissions = await Submission.find({ created_at: { $lte: startOfWeek } })
-      .lean();
+    // Determine start of current week in UTC (Sunday 00:00:00 UTC)
+    const dayOfWeek = now.getUTCDay();
+    const startOfWeekUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dayOfWeek, 0, 0, 0, 0));
+    const submissions = await Submission.find({ created_at: { $gte: startOfWeekUTC, $lte: now } }).lean();
     submissions.sort((a, b) => (b.votes?.length || 0) - (a.votes?.length || 0));
     res.json(submissions.map(mapToLeaderboardEntry));
   } catch (error) {
@@ -241,14 +264,9 @@ exports.getWeeklyLeaderboard = async (req, res) => {
 exports.getMonthlyLeaderboard = async (req, res) => {
   try {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-
-    // Get all submissions made this month
-    const submissions = await Submission.find({
-      created_at: { $lte: endOfMonth }
-    }).lean();
-
+    const startOfMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+    const submissions = await Submission.find({ created_at: { $gte: startOfMonthUTC, $lte: now } }).lean();
+    submissions.sort((a, b) => (b.votes?.length || 0) - (a.votes?.length || 0));
     res.status(200).json(submissions.map(mapToLeaderboardEntry));
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -58,6 +58,28 @@ const GalleryView = ({
   const [copiedSubmissionId, setCopiedSubmissionId] = useState<string | null>(null);
   const [originalSubmissions, setOriginalSubmissions] = useState<Submission[]>([]); // <-- move here
   const { user } = useAuth();
+  
+  // Derived, tab-specific filtered lists. We retain gallerySubmissions as the list
+  // after sort/filter controls (Top Rated/Newest/Random) are applied to the base set.
+  // Then, per-tab narrowing happens at render time so we do not mutate state between tab switches.
+  const startOfToday = React.useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+  }, []);
+  const endOfToday = React.useMemo(() => startOfToday + 24 * 60 * 60 * 1000 - 1, [startOfToday]);
+
+  const submissionsAll = gallerySubmissions;
+  const submissionsToday = React.useMemo(
+    () => submissionsAll.filter(s => {
+      const t = new Date(s.submissionDate).getTime();
+      return t >= startOfToday && t <= endOfToday;
+    }),
+    [submissionsAll, startOfToday, endOfToday]
+  );
+  const submissionsPast = React.useMemo(
+    () => submissionsAll.filter(s => new Date(s.submissionDate).getTime() < startOfToday),
+    [submissionsAll, startOfToday]
+  );
 
   // Scroll to submission if present in URL
   useEffect(() => {
@@ -340,7 +362,7 @@ const GalleryView = ({
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {gallerySubmissions.map((submission) => (
+              {(activeTab === 'all' ? submissionsAll : activeTab === 'today' ? submissionsToday : submissionsPast).map((submission) => (
                 <Card
                   key={submission.id}
                   className="overflow-hidden hover:shadow-lg transition-shadow"
@@ -354,11 +376,7 @@ const GalleryView = ({
                     />
                     {/* Overlay with quick stats */}
                     <div className="absolute top-2 right-2 bg-black/70 text-white px-2 py-1 rounded-md text-xs flex items-center gap-1">
-                      {activeTab === "today" ? (
-                        <Star className="h-3 w-3" />
-                      ) : (
-                        <Heart className="h-3 w-3" />
-                      )}
+                      <Heart className="h-3 w-3" />
                       {submission.voteCount}
                     </div>
                   </div>
@@ -395,10 +413,6 @@ const GalleryView = ({
                         >
                           {isVoting ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : activeTab === "today" ? (
-                            <Star
-                              className={`h-5 w-5 transition-colors ${submission.hasVoted ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground hover:text-yellow-400"}`}
-                            />
                           ) : (
                             <Heart
                               className={`h-5 w-5 transition-colors ${submission.hasVoted ? "fill-red-500 text-red-500" : "text-muted-foreground hover:text-red-500"}`}
@@ -471,7 +485,7 @@ const GalleryView = ({
               ))}
             </div>
 
-            {gallerySubmissions.length === 0 && (
+            {(activeTab === 'all' && submissionsAll.length === 0) || (activeTab === 'today' && submissionsToday.length === 0) || (activeTab === 'past' && submissionsPast.length === 0) ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <p className="text-muted-foreground text-lg">
                   No submissions found
@@ -480,7 +494,7 @@ const GalleryView = ({
                   Be the first to submit!
                 </Button>
               </div>
-            )}
+            ) : null}
           </>
         )}
       </div>

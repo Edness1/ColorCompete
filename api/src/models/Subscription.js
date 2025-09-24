@@ -8,4 +8,7 @@ const SubscriptionSchema = new mongoose.Schema({
   year: { type: Number, required: true }
 }, { timestamps: true });
 
+// Ensure only one subscription document per user per month/year
+SubscriptionSchema.index({ userId: 1, month: 1, year: 1 }, { unique: true });
+
 module.exports = mongoose.model('Subscription', SubscriptionSchema);

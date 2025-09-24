@@ -63,16 +63,23 @@ exports.deductSubmission = async (req, res) => {
     if (!userId) {
       return res.status(400).json({ message: 'Missing userId' });
     }
-    const subscription = await Subscription.findOne({ userId });
-    if (!subscription) {
-      return res.status(404).json({ message: 'Subscription not found' });
-    }
-    if (subscription.remaining_submissions <= 0) {
+
+    // Atomically decrement remaining_submissions if > 0
+    const updated = await Subscription.findOneAndUpdate(
+      { userId, remaining_submissions: { $gt: 0 } },
+      { $inc: { remaining_submissions: -1 } },
+      { new: true }
+    );
+
+    if (!updated) {
+      // Determine if subscription missing or just no credits left
+      const exists = await Subscription.findOne({ userId });
+      if (!exists) {
+        return res.status(404).json({ message: 'Subscription not found' });
+      }
       return res.status(400).json({ message: 'No submissions left' });
     }
-    subscription.remaining_submissions -= 1;
-    await subscription.save();
-    res.status(200).json(subscription);
+    res.status(200).json(updated);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
