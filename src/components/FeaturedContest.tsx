@@ -1,17 +1,10 @@
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Download, Eye, Trophy, Upload } from "lucide-react";
-import DownloadConfirmation from "./DownloadConfirmation";
-import SubmissionButton from "./SubmissionButton";
+import { Clock, Download, Upload, Eye, Trophy } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useContestAnalytics } from "@/hooks/useContestAnalytics";
+import SubmissionButton from "./SubmissionButton";
 import { API_URL } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,16 +26,32 @@ interface Challenge {
   endTime?: string;
 }
 
-const FeaturedContest = () => {
-  const [latestContest, setLatestContest] = useState<Challenge | null>(null);
-  const [isHovering, setIsHovering] = useState(false);
-  const [showDownloadModal, setShowDownloadModal] = useState(false);
-  const [remainingTime, setRemainingTime] = useState<string>("--:--:--");
-  const [badgeLabel, setBadgeLabel] = useState<string>("Remaining");
-  const [submissionCount, setSubmissionCount] = useState<number>(0);
+interface FeaturedContestProps {
+  title?: string;
+  imageUrl?: string;
+  remainingTime?: string;
+  contestType?: string;
+  description?: string;
+  contestId?: string;
+  artStyle?: "anime" | "matisse" | "standard";
+  // Scheduled placeholder support
+  isScheduledPlaceholder?: boolean;
+  startsIn?: string;
+}
+
+const FeaturedContest: React.FC<FeaturedContestProps> = (props) => {
   const { trackDownload } = useContestAnalytics();
   const { user } = useAuth();
   const userId = user?._id;
+  const [latestContest, setLatestContest] = useState<Challenge | null>(null);
+  const [isHovering, setIsHovering] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [badgeLabel, setBadgeLabel] = useState("Remaining");
+  const [submissionCount, setSubmissionCount] = useState(0);
+  const [internalRemainingTime, setInternalRemainingTime] = useState(
+    props.remainingTime || "--:--:--",
+  );
+  const scheduledPlaceholderImage = "/examples/woodland-creatures-line-art.png";
 
   const parseDateTimeUTC = (iso?: string, time?: string) => {
     if (!iso && !time) return null;
@@ -89,6 +98,7 @@ const FeaturedContest = () => {
 
   // Fetch latest contest
   useEffect(() => {
+    if (props.title) return;
     const fetchLatestContest = async () => {
       try {
         const res = await fetch(API_URL + "/api/challenges");
@@ -102,10 +112,11 @@ const FeaturedContest = () => {
       }
     };
     fetchLatestContest();
-  }, []);
+  }, [props.title]);
 
   // Countdown showing time until start (if scheduled) or time remaining (if active)
   useEffect(() => {
+    if (props.title) return;
     if (!latestContest) return;
 
     const getTimes = () => {
@@ -158,9 +169,9 @@ const FeaturedContest = () => {
       return "00:00:00";
     };
 
-    setRemainingTime(getTimes());
+    setInternalRemainingTime(getTimes());
     const timer = setInterval(() => {
-      setRemainingTime(getTimes());
+      setInternalRemainingTime(getTimes());
     }, 1000);
 
     return () => clearInterval(timer);
@@ -168,6 +179,7 @@ const FeaturedContest = () => {
 
   // Fetch submission count for this contest
   useEffect(() => {
+    if (props.title) return;
     const fetchSubmissionCount = async () => {
       if (!latestContest?._id) return;
       try {
@@ -183,7 +195,6 @@ const FeaturedContest = () => {
     fetchSubmissionCount();
   }, [latestContest?._id]);
 
-  // Function to handle actual download
   const handleDownload = async () => {
     try {
       if (latestContest?._id && userId) {
@@ -233,6 +244,154 @@ const FeaturedContest = () => {
     }
   };
 
+  // Removed generated line-art branch (artworkTitle/artworkImage)
+
+  if (props.title && (props.imageUrl || props.isScheduledPlaceholder)) {
+    const imageSrc = props.imageUrl || scheduledPlaceholderImage;
+    const showRemaining = !props.isScheduledPlaceholder && !!props.remainingTime;
+    const showStartsIn = !!props.isScheduledPlaceholder && !!props.startsIn;
+
+    const downloadImage = () => {
+      if (!props.imageUrl) return;
+      const link = document.createElement("a");
+      link.href = props.imageUrl;
+      const filename = `${(props.title || "line-art").replace(/[^a-z0-9]/gi, "-").toLowerCase()}-line-art.jpg`;
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    return (
+      <div className="w-full max-w-5xl mx-auto bg-background p-6 rounded-xl">
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* Left side - Artwork Preview */}
+          <div className="flex-1">
+            <Card className="overflow-hidden h-full">
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="text-2xl font-bold">{props.title}</CardTitle>
+                  </div>
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    <span>{showStartsIn ? "Starts in" : showRemaining ? "Remaining" : (props.contestType || "Contest")}</span>
+                    {(showStartsIn || showRemaining) && (
+                      <span className="ml-2 font-mono">{showStartsIn ? props.startsIn : props.remainingTime}</span>
+                    )}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0 relative">
+                <div className="w-full">
+                  {/* Single Line Art Image */}
+                  <div className="relative aspect-square overflow-hidden">
+                    <img
+                      src={imageSrc}
+                      alt={props.title}
+                      className="w-full h-full object-cover"
+                      style={{ objectFit: "contain" }}
+                    />
+                    {!props.isScheduledPlaceholder && props.imageUrl && (
+                      <div className="absolute inset-0 pointer-events-none" />
+                    )}
+                  </div>
+                </div>
+                <div className="p-6 space-y-4">
+                  <p className="text-muted-foreground">{props.description || "Join today's challenge—download the line art, color it, and submit before the countdown ends!"}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right side - Contest Info */}
+          <div className="flex flex-col gap-6 md:w-1/3">
+            <Card>
+              <CardHeader>
+                <CardTitle>How to Participate</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 p-2 rounded-full">
+                    <Download className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Step 1: Download</h3>
+                    <p className="text-sm text-muted-foreground">Download today's line art to your device</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 p-2 rounded-full">
+                    <svg className="h-5 w-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Step 2: Print</h3>
+                    <p className="text-sm text-muted-foreground">Print today's line art on a printer</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 p-2 rounded-full">
+                    <svg className="h-5 w-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Step 3: Color</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Color today's line art challenge with any tool you like, crayon, color pencil, water color, pastel, anything you wish.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 p-2 rounded-full">
+                    <Upload className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Step 4: Submit</h3>
+                    <p className="text-sm text-muted-foreground">Upload your colored artwork for voting</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 p-2 rounded-full">
+                    <Trophy className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Step 5: Win</h3>
+                    <p className="text-sm text-muted-foreground">Top voted submission wins the daily prize</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Actions for active contest (no actions when scheduled placeholder) */}
+            {!props.isScheduledPlaceholder && (
+              <div className="flex flex-col gap-3">
+                {props.imageUrl && (
+                  <Button onClick={downloadImage} size="lg" className="w-full gap-2">
+                    <Download className="h-5 w-5" />
+                    Download Line Art
+                  </Button>
+                )}
+                <SubmissionButton
+                  contestType={props.contestType as any}
+                  variant="outline"
+                  className="w-full"
+                  contestId={props.contestId}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!latestContest) {
     return (
       <div className="w-full max-w-5xl mx-auto p-6">
@@ -241,16 +400,7 @@ const FeaturedContest = () => {
     );
   }
 
-  const {
-    title,
-    lineArt,
-    description,
-    contestType,
-    artStyle,
-    download = [],
-    submissions = [],
-  } = latestContest;
-
+  const { title, lineArt, description, contestType, artStyle, download = [], submissions = [] } = latestContest;
   const displayImage = lineArt;
 
   return (
@@ -267,7 +417,7 @@ const FeaturedContest = () => {
                 <Badge variant="secondary" className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   <span>{badgeLabel}</span>
-                  <span className="ml-2 font-mono">{remainingTime}</span>
+                  <span className="ml-2 font-mono">{internalRemainingTime}</span>
                 </Badge>
               </div>
             </CardHeader>

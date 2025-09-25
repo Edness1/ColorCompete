@@ -347,7 +347,7 @@ export default function ContestManagement({
                 <FormItem>
                   <FormLabel>Start Date (starts at 11:00 UTC)</FormLabel>
                   <FormControl>
-                    <Input type="date" {...field} />
+                    <Input type="date" min={today} {...field} />
                   </FormControl>
                   <FormDescription>The contest will start at 11:00 UTC on the selected date and end 24 hours later.</FormDescription>
                   <FormMessage />

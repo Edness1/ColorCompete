@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const ChallengeSchema = new mongoose.Schema({
   title: { type: String, required: true }, // Added
-  description: { type: String, required: true }, // Added
+  description: { type: String, required: false }, // Made optional to allow contests without description
   lineArt: { type: String, required: true }, // Path or URL to JPG file
   startDate: { type: Date, required: true },
   startTime: { type: String, required: true }, // e.g., "14:00"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Upload,
@@ -27,6 +27,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -79,6 +80,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
     verifyPaymentSession,
     refreshSubscriptionData,
     isLoading: isLoadingSubscription,
+    applyServerSubscription,
   } = useSubscription();
   const tier = rawTier || "free"; // Ensure tier is never null
 
@@ -89,9 +91,55 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showPaymentPrompt, setShowPaymentPrompt] = useState(false);
   const { trackSubmission } = useContestAnalytics();
+  const [displayRemaining, setDisplayRemaining] = useState<number | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Progress helpers for indeterminate-like behavior
+  const startProgress = () => {
+    setUploadProgress(5);
+    if (progressRef.current) clearInterval(progressRef.current);
+    progressRef.current = setInterval(() => {
+      setUploadProgress((prev) => {
+        if (prev === null) return 5;
+        const next = prev + Math.random() * 7 + 3; // 3-10% step
+        return Math.min(next, 95);
+      });
+    }, 400);
+  };
+
+  const stopProgress = (complete: boolean) => {
+    if (progressRef.current) {
+      clearInterval(progressRef.current);
+      progressRef.current = null;
+    }
+    if (complete) {
+      setUploadProgress(100);
+      // Briefly show 100% before clearing
+      setTimeout(() => setUploadProgress(null), 500);
+    } else {
+      setUploadProgress(null);
+    }
+  };
 
   // Check for payment success from URL params
   useEffect(() => {
+    // On open, refresh subscription data to reduce mismatch with profile
+    if (isOpen && !isLoadingSubscription) {
+      (async () => {
+        try {
+          const snap = await refreshSubscriptionData();
+          if (snap && typeof snap.remaining_submissions === 'number') {
+            setDisplayRemaining(snap.remaining_submissions);
+          } else {
+            setDisplayRemaining(remainingSubmissions);
+          }
+        } catch {
+          setDisplayRemaining(remainingSubmissions);
+        }
+      })();
+    }
+
     const queryParams = new URLSearchParams(location.search);
     const sessionId = queryParams.get("session_id");
 
@@ -134,12 +182,12 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
     }
   }, [imageUrl]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     console.log("handleSubmit called");
     console.log("imageUrl:", imageUrl);
     console.log("user:", user);
-    console.log("remainingSubmissions:", remainingSubmissions);
-    
+    console.log("remainingSubmissions (local):", remainingSubmissions);
+
     if (!imageUrl) {
       setError("Please enter an image URL");
       return;
@@ -148,29 +196,34 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       setError("Please sign in to submit artwork");
       return;
     }
-    if (remainingSubmissions <= 0) {
-      console.log("No submissions remaining, showing payment prompt");
+
+    // Refresh subscription once via context (single source of truth)
+    let effectiveRemaining = remainingSubmissions;
+    try {
+      const snap = await refreshSubscriptionData();
+      if (snap && typeof snap.remaining_submissions === 'number') {
+        effectiveRemaining = snap.remaining_submissions;
+        setDisplayRemaining(snap.remaining_submissions);
+      }
+    } catch {}
+    if (effectiveRemaining <= 0) {
       setShowPaymentPrompt(true);
       return;
     }
-    console.log("All checks passed, showing confirmation");
+
+    console.log("All checks passed (server-verified), showing confirmation");
     setShowConfirmation(true);
   };
 
   const confirmSubmission = async () => {
     if (!imageUrl || !user) return;
     setIsSubmitting(true);
+    startProgress();
     try {
       console.log("Starting submission process...");
       console.log("Current remaining submissions:", remainingSubmissions);
       console.log("User ID:", user._id);
-      // Server now handles atomic decrement of remaining submissions.
-      if (remainingSubmissions <= 0) {
-        console.log("No remaining submissions, should redirect to payment");
-        setShowPaymentPrompt(true);
-        setIsSubmitting(false);
-        return;
-      }
+      // Trust the server to atomically enforce credits; don't block locally on stale state
 
       const submissionPayload = {
         user_id: user._id,
@@ -195,12 +248,30 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to submit artwork");
+        let errorData: any = {};
+        try { errorData = await res.json(); } catch {}
+        const message = errorData?.message || "Failed to submit artwork";
+        // If the server indicates no credits, show payment prompt instead of generic failure
+        if (res.status === 402 || /remaining|credit|submission/i.test(message)) {
+          console.log("Server denied due to no credits; prompting payment");
+          stopProgress(false);
+          setShowPaymentPrompt(true);
+          setIsSubmitting(false);
+          // Also sync from server in case it returned a snapshot later
+          try { await refreshSubscriptionData(); } catch {}
+          return;
+        }
+        throw new Error(message);
       }
 
-      // Refresh subscription (server already decremented credit)
-      await refreshSubscriptionData();
+      // Apply returned subscription snapshot (atomic decrement already done server-side)
+      const { subscription: updatedSub } = await res.json();
+      if (updatedSub) {
+        applyServerSubscription(updatedSub);
+      } else {
+        // Fallback to refresh if server didn't return a subscription (e.g., none existed or no credit decremented)
+        await refreshSubscriptionData();
+      }
 
       if (onSubmit) {
         await onSubmit({ imageUrl, ageGroup });
@@ -211,19 +282,20 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
         trackSubmission(contestId);
       }
 
-      // Refresh subscription data to ensure UI is in sync
-      await refreshSubscriptionData();
+  // Single refresh optional: only if no snapshot was applied (handled above). Intentionally removed duplicate refresh.
 
       toast({
         title: "Submission Successful",
         description: "Your artwork has been submitted for the contest!",
       });
 
+      stopProgress(true);
       setIsSubmitting(false);
       resetForm();
       onClose();
     } catch (error) {
       console.error("Submission error:", error);
+      stopProgress(false);
       setIsSubmitting(false);
       setError(
         error instanceof Error
@@ -476,7 +548,16 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       </DialogContent>
 
       {/* Confirmation Dialog */}
-      <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+      <Dialog
+        open={showConfirmation}
+        onOpenChange={(open) => {
+          setShowConfirmation(open);
+          if (!open) {
+            stopProgress(false);
+            setIsSubmitting(false);
+          }
+        }}
+      >
         <DialogContent className="w-[90vw] sm:w-full sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Confirm Submission</DialogTitle>
@@ -507,6 +588,14 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
                 </li>
               </ul>
             </div>
+            {uploadProgress !== null && (
+              <div className="space-y-2">
+                <Progress value={uploadProgress} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  Uploading and submitting… please don’t close this window.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button

@@ -1,10 +1,22 @@
-// Require Stripe and initialize with your secret key
-const Stripe = require('stripe');
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+// Require Stripe and initialize with your secret key, but guard if not configured
+let stripe = null;
+try {
+  const Stripe = require('stripe');
+  if (process.env.STRIPE_SECRET_KEY) {
+    stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+  } else {
+    console.warn('Stripe not configured: STRIPE_SECRET_KEY is missing');
+  }
+} catch (e) {
+  console.warn('Stripe initialization failed:', e?.message || e);
+}
 
 // Create a Stripe Checkout session for a single submission
 exports.createCheckoutSession = async (req, res) => {
   try {
+    if (!stripe) {
+      return res.status(503).json({ message: 'Stripe is not configured' });
+    }
     const { userId, contestId, returnUrl } = req.body;
     if (!userId || !contestId || !returnUrl) {
       return res.status(400).json({ message: 'Missing required fields' });
@@ -34,6 +46,9 @@ exports.createCheckoutSession = async (req, res) => {
 // Create a Stripe Checkout session for a subscription
 exports.createSubscriptionSession = async (req, res) => {
   try {
+    if (!stripe) {
+      return res.status(503).json({ message: 'Stripe is not configured' });
+    }
     const { userId, planTier, returnUrl } = req.body;
     if (!userId || !planTier || !returnUrl) {
       return res.status(400).json({ message: 'Missing required fields' });
@@ -74,6 +89,9 @@ exports.createSubscriptionSession = async (req, res) => {
 exports.verifySession = async (req, res) => {
     console.log('Verifying Stripe session');
   try {
+    if (!stripe) {
+      return res.status(503).json({ message: 'Stripe is not configured' });
+    }
     const { sessionId } = req.query;
 
     console.log('Verifying Stripe session', sessionId);

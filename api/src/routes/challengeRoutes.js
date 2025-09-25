@@ -4,6 +4,7 @@ const challengeController = require('../controllers/challengeController');
 
 // Place this BEFORE any route with :id
 router.get('/active', challengeController.getActiveChallenge);
+router.get('/current-active', challengeController.getCurrentActiveChallenge);
 
 // Create a new challenge
 router.post('/', challengeController.createChallenge);

@@ -7,7 +7,8 @@
   "start": "node src/app.js",
   "dev": "nodemon src/app.js",
   "init-email-automations": "node init-email-automations.js",
-  "migrate:created-at": "node src/scripts/migrate-created-at-to-date.js"
+  "migrate:created-at": "node src/scripts/migrate-created-at-to-date.js",
+  "migrate:subscriptions-single": "node src/scripts/migrate-subscriptions-single-doc.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

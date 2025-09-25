@@ -64,8 +64,9 @@ export function useUserMetrics(): UserMetrics {
       try {
         const res = await fetch(`${API_URL}/api/submissions?user_id=${user._id}`);
         if (!res.ok) throw new Error("Failed to fetch submissions for metrics");
-        const data = await res.json();
-        const mine = Array.isArray(data) ? data.filter((s: any) => s.user_id === user._id || s.userId === user._id) : [];
+  const data = await res.json();
+  const uid = String(user._id);
+  const mine = Array.isArray(data) ? data.filter((s: any) => String(s.user_id || s.userId) === uid) : [];
         setSubs(mine);
       } catch (err) {
         // silent fallback; subs stays empty

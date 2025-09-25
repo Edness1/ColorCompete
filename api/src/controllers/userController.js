@@ -67,24 +67,38 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// Forgot Password
+// Forgot Password (sends email with token)
+const emailService = require('../services/emailService');
+const emailTemplateService = require('../services/emailTemplateService');
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email is required' });
+
     const user = await User.findOne({ email });
+    // For security, respond with success even if user not found, but do not send email
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.json({ message: 'If that email exists, a reset link has been sent' });
     }
+
     const token = crypto.randomBytes(32).toString('hex');
     user.resetPasswordToken = token;
     user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
     await user.save();
 
-    // TODO: Send email with reset link containing the token
-    // e.g., https://yourdomain.com/reset-password/${token}
+    const frontendBase = process.env.FRONTEND_BASE_URL || 'http://localhost:5173';
+    const resetLink = `${frontendBase}/reset-password/${token}`;
 
-    res.json({ message: 'Password reset link sent' });
+    const { subject, html } = emailTemplateService.render('reset_password', {
+      resetLink,
+      firstName: user.firstName || user.username || 'there'
+    });
+
+    await emailService.sendEmail({ to: { email: user.email, userId: user._id }, subject, htmlContent: html });
+
+    res.json({ message: 'If that email exists, a reset link has been sent' });
   } catch (error) {
+    console.error('Forgot password error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -139,16 +153,17 @@ exports.getUserStats = async (req, res) => {
     }
 
     // Count total submissions
-    const totalSubmissions = await Submission.countDocuments({ user_id });
-    // Count wins
-    const winCount = await Submission.countDocuments({ user_id, isWinner: true });
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(user_id)) {
+      return res.status(400).json({ message: 'Invalid user_id' });
+    }
+    const userObjectId = new mongoose.Types.ObjectId(user_id);
 
-    // Distinct contests (schema uses challenge_id)
-    const contestsParticipated = await Submission.distinct("challenge_id", { user_id }).then(arr => arr.length);
-
-    // Aggregate total votes across user's submissions (votes is an array on each submission)
+    const totalSubmissions = await Submission.countDocuments({ user_id: userObjectId });
+    const winCount = await Submission.countDocuments({ user_id: userObjectId, isWinner: true });
+    const contestsParticipated = await Submission.distinct("challenge_id", { user_id: userObjectId }).then(arr => arr.length);
     const voteAggregation = await Submission.aggregate([
-      { $match: { user_id: typeof user_id === 'string' ? new (require('mongoose').Types.ObjectId)(user_id) : user_id } },
+      { $match: { user_id: userObjectId } },
       { $project: { voteCount: { $size: { $ifNull: ["$votes", []] } } } },
       { $group: { _id: null, totalVotes: { $sum: "$voteCount" } } }
     ]).catch(() => []);

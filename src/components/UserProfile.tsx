@@ -11,6 +11,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
@@ -165,6 +166,7 @@ const UserProfile = ({
     tier: rawTier,
     remainingSubmissions,
     isLoading: subscriptionLoading,
+    refreshSubscriptionData,
   } = useSubscription();
   const tier = rawTier || "free"; // Ensure tier is never null
   const userStats = useUserStats();
@@ -175,6 +177,13 @@ const UserProfile = ({
   const [userAchievements, setUserAchievements] = useState<Achievement[]>([]);
   const [apiProfile, setApiProfile] = useState<any>(null);
   const [activeContestId, setActiveContestId] = useState<string | null>(null);
+
+  // Keep subscription info fresh when visiting profile
+  useEffect(() => {
+    if (user?._id) {
+      refreshSubscriptionData().catch(() => {});
+    }
+  }, [user?._id]);
 
   // Fetch user profile data from your API (not Supabase)
   useEffect(() => {
@@ -261,56 +270,38 @@ const UserProfile = ({
       // Fetch user submissions from API
       const fetchSubmissions = async () => {
         try {
-          const res = await fetch(`${API_URL}/api/submissions?user_id=${user._id}`);
-          if (!res.ok) throw new Error("Failed to fetch submissions");
+          const res = await fetch(`${API_URL}/api/submissions/user/${user._id}`);
+          if (!res.ok) throw new Error('Failed to fetch submissions');
           const data = await res.json();
-          if (data && data.length > 0) {
-            // Filter to ensure only submissions authored by the current user
-            const userSubmissionsOnly = data.filter((sub: any) => 
-              sub.user_id === user._id || sub.userId === user._id || sub.author_id === user._id
-            );
-            
-            // Process submissions and fetch challenge titles
-            const submissionsWithTitles = await Promise.all(
-              userSubmissionsOnly.map(async (sub: any) => {
-                let challengeTitle = "Daily Contest";
-                let challengeType = "daily"; // Default to daily
-                
-                // If we have a challenge_id, fetch the challenge details
-                if (sub.challenge_id) {
-                  try {
-                    const challengeRes = await fetch(`${API_URL}/api/challenges/${sub.challenge_id}`);
-                    if (challengeRes.ok) {
-                      const challengeData = await challengeRes.json();
-                      challengeTitle = challengeData.title || challengeData.name || "Daily Contest";
-                      challengeType = challengeData.type || challengeData.contestType || "daily";
-                    }
-                  } catch (challengeError) {
-                    console.error("Error fetching challenge details:", challengeError);
+          const mapped = await Promise.all(
+            data.map(async (sub: any) => {
+              let challengeTitle = 'Daily Contest';
+              let challengeType = 'daily';
+              if (sub.challenge_id) {
+                try {
+                  const cr = await fetch(`${API_URL}/api/challenges/${sub.challenge_id}`);
+                  if (cr.ok) {
+                    const cdata = await cr.json();
+                    challengeTitle = cdata.title || cdata.name || challengeTitle;
+                    challengeType = cdata.type || cdata.contestType || challengeType;
                   }
-                }
-
-                return {
-                  id: sub.id || sub._id || `submission-${Date.now()}-${Math.random()}`,
-                  title: challengeTitle,
-                  imageUrl: sub.file_path || sub.file_path,
-                  date: new Date(sub.created_at || sub.date).toLocaleDateString(),
-                  votes: Array.isArray(sub.votes) ? sub.votes.length : (sub.votes || 0),
-                  contestId: sub.contest_id || sub.contestId || sub.challenge_id,
-                  contestName: challengeTitle,
-                  contestType: challengeType,
-                };
-              })
-            );
-            
-            setUserSubmissions(submissionsWithTitles);
-          } else {
-            // If no submissions found, set empty array
-            setUserSubmissions([]);
-          }
-        } catch (error) {
-          console.error("Error fetching submissions:", error);
-          // On error, set empty array to avoid showing demo data
+                } catch {}
+              }
+              return {
+                id: sub._id,
+                title: challengeTitle,
+                imageUrl: sub.file_path,
+                date: new Date(sub.created_at).toLocaleDateString(),
+                votes: Array.isArray(sub.votes) ? sub.votes.length : 0,
+                contestId: sub.challenge_id,
+                contestName: challengeTitle,
+                contestType: challengeType
+              };
+            })
+          );
+          setUserSubmissions(mapped);
+        } catch (e) {
+          console.error('Error fetching submissions:', e);
           setUserSubmissions([]);
         }
       };
@@ -372,9 +363,7 @@ const UserProfile = ({
   const winCount = user
     ? userStats.winCount
     : achievements.filter((a) => a.type === "win").length;
-  const submissionCount = user
-    ? userStats.totalSubmissions
-    : submissions.length;
+  const submissionCount = user ? userSubmissions.length : submissions.length;
 
   // Add state for each profile field
   const [editUsername, setEditUsername] = useState(username);
@@ -387,6 +376,8 @@ const UserProfile = ({
   const [updateLoading, setUpdateLoading] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [updateSuccess, setUpdateSuccess] = useState(false);
+  const { toast } = useToast();
+  const [sendingReset, setSendingReset] = useState(false);
 
   // When apiProfile loads, update the edit fields
   useEffect(() => {
@@ -426,6 +417,24 @@ const UserProfile = ({
       setUpdateError(err.message || "Update failed");
     } finally {
       setUpdateLoading(false);
+    }
+  };
+
+  const handleSendPasswordReset = async () => {
+    if (!user?._id) return;
+    setSendingReset(true);
+    try {
+      const res = await fetch(`${API_URL}/api/users/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      if (!res.ok) throw new Error('Request failed');
+      toast({ title: 'Reset Email Sent', description: 'If that email exists, a reset link has been sent.' });
+    } catch (err:any) {
+      toast({ title: 'Unable to send reset', description: err.message || 'Try again later.' });
+    } finally {
+      setSendingReset(false);
     }
   };
 
@@ -808,8 +817,8 @@ const UserProfile = ({
                         Update your account password
                       </p>
                     </div>
-                    <Button variant="outline" size="sm">
-                      Change
+                    <Button variant="outline" size="sm" onClick={handleSendPasswordReset} disabled={sendingReset}>
+                      {sendingReset ? 'Sending...' : 'Change'}
                     </Button>
                   </div>
                   <div className="flex justify-between items-center">

@@ -12,8 +12,17 @@ Key frontend domains now:
 - Subscription & credits: `GET/PUT/POST /api/subscription`, deduction `POST /api/subscription/deduct` (legacy), integrated decrement in submission create
 - Stripe checkout: `/api/stripe/checkout-session`, `/api/stripe/subscription-session`, `/api/stripe/verify-session`
 
-Planned (placeholder) endpoints:
-- Line art daily generation: `GET /api/line-art/daily?date=YYYY-MM-DD` (currently falls back to a static sample on the frontend)
+Additional endpoints:
+- Line art daily generation: `GET /api/line-art/daily?date=YYYY-MM-DD` (auto-generates deterministic placeholder if none stored)  
+  - Admin curation/upsert: `PUT /api/line-art/daily` body: `{ date, title, description, imageUrl, bwImageUrl, keywords[], artStyle, attribution }`
+  - Listing (recent): `GET /api/line-art/list?limit=30`
+- Password reset flow:
+  - Request reset: `POST /api/users/forgot-password` body: `{ email }` -> stores token & expiry (1h)
+  - Complete reset: `POST /api/users/reset-password` body: `{ token, password }`
+    - Sends transactional email via SendGrid including a link to `${FRONTEND_BASE_URL}/reset-password/:token`.
+    - Security: Response is always success-shaped to avoid email enumeration.
+    - Environment variables required: `SENDGRID_API_KEY`, `FROM_EMAIL`, optional `FROM_NAME`, and `FRONTEND_BASE_URL`.
+    - Token TTL: 1 hour. On use, token + expiry fields are cleared.
 
 ---
 
@@ -44,6 +53,36 @@ export default {
 ```
 
 ### Submission Credit Integrity
+
+### Email Template System
+
+Transactional emails (currently password reset) use a lightweight template service located at `api/src/services/emailTemplateService.js`.
+
+Templates are registered in a JavaScript object with `subject` and `html` (supports `{{variable}}` replacement). Available variables are merged with a default `year`.
+
+Example usage:
+
+```js
+const emailTemplateService = require('./services/emailTemplateService');
+const { subject, html } = emailTemplateService.render('reset_password', { resetLink, firstName });
+```
+
+To add a new template:
+1. Open `emailTemplateService.js` and add a new key under `this.templates`.
+2. Use `{{variableName}}` placeholders in the HTML.
+3. Call `render('your_key', { variableName: 'Value' })` in the relevant controller or service.
+
+Environment variables required for sending:
+- `SENDGRID_API_KEY`
+- `FROM_EMAIL`
+- Optional: `FROM_NAME`
+- `FRONTEND_BASE_URL` (for building links like password reset)
+
+Security considerations:
+- Password reset endpoint returns a generic success response to prevent user enumeration.
+- Consider hashing password reset tokens in the database for defense-in-depth (future enhancement).
+- You can add rate limiting (e.g., via middleware) to `/api/users/forgot-password`.
+
 
 The submission credit system now decrements credits server-side atomically when a submission is created. Frontend no longer pre-deducts. This prevents users from exploiting username/profile changes to reset or regain credits.
 

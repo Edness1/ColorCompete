@@ -20,8 +20,29 @@ exports.createChallenge = async (req, res) => {
 // Get all challenges
 exports.getAllChallenges = async (req, res) => {
   try {
-    const challenges = await Challenge.find();
+  const challenges = await Challenge.find();
     res.status(200).json(challenges);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Explicit active challenge endpoint: returns the single most recent active challenge
+exports.getCurrentActiveChallenge = async (req, res) => {
+  try {
+    const now = new Date();
+    // Active defined by status === 'active' and current time within window if dates exist
+    const active = await Challenge.find({ status: 'active' }).sort({ startDate: -1 }).lean();
+    if (!active || active.length === 0) return res.status(404).json({ message: 'No active challenge' });
+    // Optionally filter by time window if multiple are incorrectly flagged active
+    const filtered = active.filter(c => {
+      if (!c.startDate || !c.endDate) return true;
+      const start = new Date(c.startDate);
+      const end = new Date(c.endDate);
+      return start <= now && now <= end;
+    });
+    const selected = (filtered[0] || active[0]);
+    res.status(200).json(selected);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -150,33 +171,35 @@ exports.getAllContestAnalytics = async (req, res) => {
   }
 };
 
-// Increment a specific analytics metric for a contest
+// Increment a specific analytics metric for a contest (atomic)
 exports.incrementContestMetric = async (req, res) => {
   try {
-    const { id, metric } = { id: req.params.id, metric: req.params.metric };
+    const id = req.params.id;
+    const metric = req.params.metric;
     const allowedMetrics = ['views', 'downloads', 'submissions', 'votes'];
 
     if (!allowedMetrics.includes(metric)) {
       return res.status(400).json({ message: 'Invalid metric type' });
     }
 
-    // Ensure contest exists
-    const challenge = await Challenge.findById(id);
-    if (!challenge) {
+    // Validate contest exists (fast path cacheable later if needed)
+    const exists = await Challenge.exists({ _id: id });
+    if (!exists) {
       return res.status(404).json({ message: 'Challenge not found' });
     }
 
-    // Find existing analytics doc or create one
-    let analytics = await ContestAnalytics.findOne({ contest_id: id });
-    if (!analytics) {
-      analytics = new ContestAnalytics({ contest_id: id });
-    }
+    // Atomic upsert & increment
+    const update = await ContestAnalytics.findOneAndUpdate(
+      { contest_id: id },
+      {
+        $inc: { [metric]: 1 },
+        $set: { updated_at: new Date() },
+        $setOnInsert: { contest_id: id },
+      },
+      { new: true, upsert: true }
+    );
 
-    analytics[metric] = (analytics[metric] || 0) + 1;
-    analytics.updated_at = new Date();
-    await analytics.save();
-
-    res.status(200).json(analytics);
+    res.status(200).json(update);
   } catch (error) {
     console.error('Error incrementing contest metric:', error);
     res.status(500).json({ message: error.message });

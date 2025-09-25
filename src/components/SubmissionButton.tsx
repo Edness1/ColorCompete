@@ -3,6 +3,7 @@ import { Button } from "./ui/button";
 import { Upload } from "lucide-react";
 import SubmissionForm from "./SubmissionForm";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import AuthModal from "./auth/AuthModal";
 
 interface SubmissionButtonProps {
@@ -29,12 +30,17 @@ export default function SubmissionButton({
   const [showSubmissionForm, setShowSubmissionForm] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const { user } = useAuth();
+  const { refreshSubscriptionData } = useSubscription();
 
-  const handleSubmitClick = () => {
+  const handleSubmitClick = async () => {
     if (!user) {
       setShowAuthModal(true);
       return;
     }
+    // Ensure we have the freshest remainingSubmissions before opening the form
+    try {
+      await refreshSubscriptionData();
+    } catch {}
     setShowSubmissionForm(true);
   };
 

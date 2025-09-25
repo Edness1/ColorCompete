@@ -1,10 +1,21 @@
-const sgMail = require('@sendgrid/mail');
+let sgMail = null;
+try {
+  sgMail = require('@sendgrid/mail');
+} catch (e) {
+  console.warn('SendGrid library not available:', e?.message || e);
+}
 const axios = require('axios');
 const EmailLog = require('../models/EmailLog');
 const tremendousService = require('./tremendousService');
 
-// Initialize SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+// Initialize SendGrid if configured
+if (sgMail) {
+  if (process.env.SENDGRID_API_KEY) {
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  } else {
+    console.warn('SendGrid not configured: SENDGRID_API_KEY is missing');
+  }
+}
 
 class EmailService {
   constructor() {
@@ -15,6 +26,9 @@ class EmailService {
   // Send individual email
   async sendEmail({ to, subject, htmlContent, textContent, campaignId = null, automationId = null }) {
     try {
+      if (!sgMail || !process.env.SENDGRID_API_KEY) {
+        return { success: false, error: 'Email service is not configured' };
+      }
       const msg = {
         to,
         from: {

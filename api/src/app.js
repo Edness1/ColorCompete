@@ -12,6 +12,7 @@ const monthlyDrawingRoutes = require('./routes/monthlyDrawing');
 const dbConfig = require('./config/db');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
+const lineArtRoutes = require('./routes/lineArtRoutes');
 const emailAutomationService = require('./services/emailAutomationService');
 const BadgeService = require('./services/badgeService');
 
@@ -45,6 +46,7 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/monthly-drawings', monthlyDrawingRoutes);
+app.use('/api/line-art', lineArtRoutes);
 
 // Start the server
 app.listen(PORT, () => {

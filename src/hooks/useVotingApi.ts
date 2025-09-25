@@ -12,7 +12,7 @@ export function useVotingApi() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/submissions/submissions/${submissionId}/vote`, {
+  const res = await fetch(`${API_URL}/api/submissions/${submissionId}/vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -36,7 +36,7 @@ export function useVotingApi() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/submissions/submissions/${submissionId}/vote`);
+  const res = await fetch(`${API_URL}/api/submissions/${submissionId}/vote`);
       if (!res.ok) return { hasVoted: false, error: null };
       const data = await res.json();
       return { hasVoted: !!data.hasVoted, error: null };
@@ -53,10 +53,10 @@ export function useVotingApi() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/submissions/contests/${contestId}/vote-counts`);
+  const res = await fetch(`${API_URL}/api/submissions/contests/${contestId}/vote-counts`);
       if (!res.ok) throw new Error('Failed to fetch vote counts');
-      const data = await res.json();
-      return { data: data.submissions || data, error: null };
+  const data = await res.json();
+  return { data: data.submissions || data, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to fetch vote counts");
       return { data: null, error: err };

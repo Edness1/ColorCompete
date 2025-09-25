@@ -14,21 +14,43 @@ exports.createSubmission = async (req, res) => {
 
     // Attempt to decrement subscription credit if available
     const Subscription = require('../models/Subscription');
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
+    // Ensure a single subscription exists and is reset if needed
+    let subscription = await Subscription.findOne({ userId: String(payload.user_id) }).session(session);
+    if (!subscription) {
+      subscription = await Subscription.create([
+        {
+          userId: String(payload.user_id),
+          tier: 'free',
+          remaining_submissions: 2,
+          lastResetAt: new Date()
+        }
+      ], { session }).then(r => r[0]);
+    } else {
+      // Monthly reset if needed
+      const now = new Date();
+      const tierLimits = { free: 2, lite: 5, pro: 20, champ: 999 };
+      if (
+        !subscription.lastResetAt ||
+        subscription.lastResetAt.getUTCFullYear() !== now.getUTCFullYear() ||
+        subscription.lastResetAt.getUTCMonth() !== now.getUTCMonth()
+      ) {
+        const limit = tierLimits[subscription.tier || 'free'];
+        subscription.remaining_submissions = limit;
+        subscription.lastResetAt = now;
+        await subscription.save({ session });
+      }
+    }
 
-    // Only decrement if user has a subscription record and credits > 0
-    const subscription = await Subscription.findOneAndUpdate(
-      {
-        userId: String(payload.user_id),
-        month: currentMonth,
-        year: currentYear,
-        remaining_submissions: { $gt: 0 }
-      },
+    // Enforce credits: decrement atomically or reject
+    const updatedSub = await Subscription.findOneAndUpdate(
+      { _id: subscription._id, remaining_submissions: { $gt: 0 } },
       { $inc: { remaining_submissions: -1 } },
-      { new: true }
-    ).session(session);
+      { new: true, session }
+    );
+    if (!updatedSub) {
+      await session.abortTransaction();
+      return res.status(402).json({ message: 'No submissions left' });
+    }
 
     const submission = await Submission.create([payload], { session });
     const created = submission[0];
@@ -46,7 +68,7 @@ exports.createSubmission = async (req, res) => {
     }
 
     await session.commitTransaction();
-    res.status(201).json({ submission: created, subscription });
+    res.status(201).json({ submission: created, subscription: updatedSub });
   } catch (error) {
     await session.abortTransaction();
     res.status(400).json({ message: error.message });
@@ -55,13 +77,22 @@ exports.createSubmission = async (req, res) => {
   }
 };
 
-// Get all submissions
+// Get submissions (optionally filtered by user_id or challenge_id)
 exports.getAllSubmissions = async (req, res) => {
   try {
-    const { status } = req.query;
-    let filter = {};
+    const { status, user_id, challenge_id } = req.query;
+    const filter = {};
     if (status) filter.status = status;
-    const submissions = await Submission.find(filter);
+    if (user_id) {
+      const mongoose = require('mongoose');
+      if (mongoose.Types.ObjectId.isValid(user_id)) {
+        filter.user_id = new mongoose.Types.ObjectId(user_id);
+      } else {
+        return res.status(400).json({ message: 'Invalid user_id format' });
+      }
+    }
+    if (challenge_id) filter.challenge_id = challenge_id;
+    const submissions = await Submission.find(filter).sort({ created_at: -1 });
     res.status(200).json(submissions);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -184,16 +215,27 @@ exports.addVote = async (req, res) => {
         const challenge = await Challenge.findById(submission.challenge_id).lean();
         if (challenge) {
           const now = new Date();
-          let endDateTime = null;
-            if (challenge.endDate && challenge.endTime) {
-              const [h,m] = challenge.endTime.split(':').map(Number);
-              endDateTime = new Date(challenge.endDate);
-              endDateTime.setHours(h||0,m||0,0,0);
-            } else if (challenge.endDate) {
-              endDateTime = new Date(challenge.endDate);
-            }
-          const contestEnded = (challenge.status === 'completed') || (endDateTime && now > endDateTime);
-          if (contestEnded) return res.status(403).json({ message: 'Voting period for this contest has ended', code: 'VOTING_CLOSED' });
+          // Build start and end datetimes consistently in UTC
+          let start = challenge.startDate ? new Date(challenge.startDate) : null;
+          let end = challenge.endDate ? new Date(challenge.endDate) : null;
+          // If time strings present but start/end are date-only, adjust time portion in UTC
+          if (start && challenge.startTime && !isNaN(start.getTime())) {
+            const [sh, sm] = challenge.startTime.split(':').map(Number);
+            start = new Date(start.toISOString());
+            start.setUTCHours(sh || 0, sm || 0, 0, 0);
+          }
+          if (end && challenge.endTime && !isNaN(end.getTime())) {
+            const [eh, em] = challenge.endTime.split(':').map(Number);
+            end = new Date(end.toISOString());
+            end.setUTCHours(eh || 0, em || 0, 0, 0);
+          }
+
+          // Voting allowed while contest is active and before or at end time
+          const endedByStatus = challenge.status === 'completed';
+          const endedByTime = end ? now > end : false;
+          if (endedByStatus || endedByTime) {
+            return res.status(403).json({ message: 'Voting period for this contest has ended', code: 'VOTING_CLOSED' });
+          }
         }
       } catch (challengeErr) {
         console.error('Error checking challenge for voting lock:', challengeErr);
@@ -201,9 +243,9 @@ exports.addVote = async (req, res) => {
       }
     }
     // Atomic add (idempotent)
-    await Submission.updateOne({ _id: submissionId }, { $addToSet: { votes: user_id } });
-    const updated = await Submission.findById(submissionId).lean();
-    return res.json({ success: true, votes: updated.votes.length });
+  await Submission.updateOne({ _id: submissionId }, { $addToSet: { votes: user_id } });
+  const updated = await Submission.findById(submissionId).lean();
+  return res.json({ success: true, votes: (updated.votes || []).length, contest_id: updated.challenge_id });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -297,6 +339,24 @@ exports.getAllTimeLeaderboard = async (req, res) => {
     const submissions = await Submission.find({}).lean();
     submissions.sort((a, b) => (b.votes?.length || 0) - (a.votes?.length || 0));
     res.json(submissions.map(mapToLeaderboardEntry));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// GET /api/submissions/contests/:contestId/vote-counts
+// Returns compact vote counts for each submission in a contest
+exports.getVoteCountsForContest = async (req, res) => {
+  try {
+    const { contestId } = req.params;
+    if (!contestId) return res.status(400).json({ message: 'contestId is required' });
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(contestId)) {
+      return res.status(400).json({ message: 'Invalid contestId format' });
+    }
+    const subs = await Submission.find({ challenge_id: contestId }, { _id: 1, votes: 1 }).lean();
+    const result = subs.map(s => ({ submission_id: s._id, votes: Array.isArray(s.votes) ? s.votes.length : 0 }));
+    res.json({ contest_id: contestId, submissions: result });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

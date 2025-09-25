@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import FeaturedContest from "./FeaturedContest";
 import { Skeleton } from "./ui/skeleton";
 import { useContestAnalytics } from "@/hooks/useContestAnalytics";
-import { useLineArtGeneration } from "@/hooks/useLineArtGeneration";
 import { Button } from "./ui/button";
+import { API_URL } from "@/lib/utils";
 
 interface Contest {
   _id?: string;
@@ -18,56 +18,105 @@ interface Contest {
 }
 
 export default function ActiveContest() {
-  const [contest, setContest] = useState<Contest | null>(null);
+  const [activeContest, setActiveContest] = useState<Contest | null>(null);
+  const [scheduledContest, setScheduledContest] = useState<Contest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { trackView } = useContestAnalytics();
-  const {
-    lineArt,
-    isLoading: isLineArtLoading,
-    error: lineArtError,
-    generateLineArt,
-  } = useLineArtGeneration();
+  // Removed line art generation flow
+
+  // Safely parse JSON from a Response, tolerating empty or non-JSON bodies
+  async function safeJson<T = any>(res: Response): Promise<T | null> {
+    try {
+      if (res.status === 204) return null;
+      const text = await res.text();
+      if (!text || !text.trim()) return null;
+      const contentType = res.headers.get("content-type") || "";
+      if (/application\/json/i.test(contentType)) {
+        return JSON.parse(text) as T;
+      }
+      // If content-type isn't JSON, attempt parse but tolerate failure
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
 
   useEffect(() => {
     async function fetchActiveContest() {
       try {
         setIsLoading(true);
         setError(null);
-
-        // Generate line art as a fallback regardless of contest availability
-        generateLineArt();
-
-        // Fetch contests list from REST API
-        const res = await fetch('/api/challenges');
-        if (!res.ok) throw new Error('Failed to fetch contests');
-        const contests: Contest[] = await res.json();
+        let contests: Contest[] = [];
+        // Try direct current-active
+  const direct = await fetch(API_URL + "/api/challenges/current-active");
+        if (direct.ok) {
+          const single = await safeJson<any>(direct);
+          if (single && !Array.isArray(single)) {
+            contests = [
+              {
+                ...(single as any),
+                start_date: (single as any).start_date || (single as any).startDate,
+                end_date: (single as any).end_date || (single as any).endDate,
+                image_url: (single as any).image_url || (single as any).lineArt,
+                contest_type: (single as any).contest_type || (single as any).contestType,
+                status: ((single as any).status || "").toLowerCase(),
+              } as Contest,
+            ];
+          }
+        }
+        if (contests.length === 0) {
+          const res = await fetch(API_URL + "/api/challenges");
+          if (!res.ok) throw new Error("Failed to fetch contests");
+          const raw = await safeJson<any[]>(res);
+          const list = Array.isArray(raw) ? raw : [];
+          contests = list.map((c: any) => ({
+            ...(c as any),
+            start_date: c.start_date || c.startDate,
+            end_date: c.end_date || c.endDate,
+            image_url: c.image_url || c.lineArt,
+            contest_type: c.contest_type || c.contestType,
+            status: (c.status || "").toLowerCase(),
+          }));
+        }
 
         const now = new Date();
-        const active = contests.find(c => c.status === 'active');
-        let selected = active;
-        if (!selected) {
-          const scheduled = contests
-            .filter(c => c.status === 'scheduled')
-            .sort((a,b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())[0];
-          selected = scheduled;
+        let act = contests.find((c) => (c.status || "").toLowerCase() === "active");
+        if (!act) {
+          act =
+            contests.find((c) => {
+              const start = c.start_date ? new Date(c.start_date) : null;
+              const end = c.end_date ? new Date(c.end_date) : null;
+              return start && end && start <= now && now < end;
+            }) || null;
         }
-        if (!selected) {
-          const completed = contests
-            .filter(c => c.status === 'completed')
-            .sort((a,b) => new Date(b.end_date).getTime() - new Date(a.end_date).getTime())[0];
-          selected = completed;
-        }
-        if (selected) {
-          setContest(selected);
-          const viewContestId = selected.id || selected._id;
+        const scheduledList = contests
+          .filter(
+            (c) => (c.status || "").toLowerCase() === "scheduled" || (c.start_date && new Date(c.start_date) > now)
+          )
+          .sort((a, b) => {
+            const at = a.start_date ? new Date(a.start_date).getTime() : Number.POSITIVE_INFINITY;
+            const bt = b.start_date ? new Date(b.start_date).getTime() : Number.POSITIVE_INFINITY;
+            return at - bt;
+          });
+        const sched = scheduledList.length > 0 ? scheduledList[0] : null;
+
+        if (act) {
+          setActiveContest(act);
+          const viewContestId = act.id || act._id;
           if (viewContestId) {
             const sessionKey = `contest_viewed_${viewContestId}`;
             if (!sessionStorage.getItem(sessionKey)) {
               trackView(viewContestId);
-              sessionStorage.setItem(sessionKey, '1');
+              sessionStorage.setItem(sessionKey, "1");
             }
           }
+        } else if (sched) {
+          setScheduledContest(sched);
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -81,36 +130,37 @@ export default function ActiveContest() {
     fetchActiveContest();
   }, []);
 
-  // Calculate remaining time for the contest
-  const calculateRemainingTime = () => {
-    if (!contest) return "";
-
-    const endDate = new Date(contest.end_date);
-    const now = new Date();
-
-    if (now > endDate) return "Contest ended";
-
-    const diffMs = endDate.getTime() - now.getTime();
-    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    const diffSecs = Math.floor((diffMs % (1000 * 60)) / 1000);
-
-    return `${diffHrs.toString().padStart(2, "0")}:${diffMins.toString().padStart(2, "0")}:${diffSecs.toString().padStart(2, "0")}`;
+  // Countdown handling
+  const formatHMS = (totalSeconds: number) => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
   };
-
-  const [remainingTime, setRemainingTime] = useState(calculateRemainingTime());
+  const [activeRemaining, setActiveRemaining] = useState<string>("--:--:--");
+  const [startCountdown, setStartCountdown] = useState<string>("--:--:--");
 
   useEffect(() => {
-    if (!contest) return;
+    function tick() {
+      const now = new Date();
+      if (activeContest) {
+        const end = new Date(activeContest.end_date);
+        const diff = Math.max(0, Math.floor((end.getTime() - now.getTime()) / 1000));
+        setActiveRemaining(formatHMS(diff));
+      } else if (scheduledContest) {
+        const start = new Date(scheduledContest.start_date);
+        const diff = Math.max(0, Math.floor((start.getTime() - now.getTime()) / 1000));
+        setStartCountdown(formatHMS(diff));
+      }
+    }
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [activeContest, scheduledContest]);
 
-    const timer = setInterval(() => {
-      setRemainingTime(calculateRemainingTime());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [contest]);
-
-  if (isLoading && isLineArtLoading) {
+  if (isLoading) {
     return (
       <div className="w-full max-w-5xl mx-auto p-6">
         <Skeleton className="h-[500px] w-full rounded-xl" />
@@ -118,29 +168,40 @@ export default function ActiveContest() {
     );
   }
 
-  // If we have line art, show it even if there's a contest error
-  if (lineArt && !isLineArtLoading) {
+  // Active contest
+  if (activeContest) {
     return (
       <FeaturedContest
-        artworkTitle={lineArt.title || "Daily Coloring Challenge"}
-        artworkImage={lineArt.imageUrl}
-        artworkBwImage={lineArt.bwImageUrl}
-        remainingTime="23:59:59" // Default to end of day
-        contestType="traditional"
-        description={lineArt.description || "Today's coloring challenge"}
-        artStyle={lineArt.artStyle}
+        title={activeContest.title}
+        imageUrl={activeContest.image_url}
+        remainingTime={activeRemaining}
+        contestType={activeContest.contest_type as any}
+        description={activeContest.description}
+        contestId={(activeContest.id || activeContest._id) as string}
       />
     );
   }
 
-  // If there's an error with both contest and line art
-  if (error && lineArtError) {
+  // Scheduled contest placeholder (single column with instructions)
+  if (scheduledContest) {
+    return (
+      <FeaturedContest
+        title={scheduledContest.title}
+        description={scheduledContest.description}
+        isScheduledPlaceholder
+        startsIn={startCountdown}
+        contestType={scheduledContest.contest_type}
+      />
+    );
+  }
+
+  // If there's an error loading the contest
+  if (error) {
     return (
       <div className="w-full max-w-5xl mx-auto p-6 text-center">
         <div className="bg-destructive/10 text-destructive p-4 rounded-xl">
           <p className="font-semibold mb-2">Error</p>
           <p>{error}</p>
-          <p className="mt-2">{lineArtError}</p>
           <div className="mt-4 flex flex-col gap-2 items-center">
             <Button
               onClick={() => window.location.reload()}
@@ -148,74 +209,22 @@ export default function ActiveContest() {
             >
               Reload Page
             </Button>
-            <Button
-              onClick={() => generateLineArt()}
-              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors"
-            >
-              Generate Line Art
-            </Button>
           </div>
         </div>
       </div>
     );
   }
-
-  // If we have line art but no contest
-  if (!contest && lineArt && !isLineArtLoading) {
+  // Absolute fallback when no contests are available
+  if (!activeContest && !scheduledContest) {
     return (
       <FeaturedContest
-        artworkTitle={lineArt.title || "Daily Coloring Challenge"}
-        artworkImage={lineArt.imageUrl}
-        artworkBwImage={lineArt.bwImageUrl}
-        remainingTime="23:59:59" // Default to end of day
-        contestType="traditional"
-        description={lineArt.description || "Today's coloring challenge"}
-        artStyle={lineArt.artStyle}
+        title="No Active Contest"
+        description="There isn't an active contest right now. Check back soon for the next daily coloring challenge!"
+        imageUrl="/examples/woodland-creatures-line-art.png"
+        contestType="daily"
+        isScheduledPlaceholder
       />
     );
   }
-
-  // If no contest and no line art
-  if (!contest && !lineArt) {
-    return (
-      <div className="w-full max-w-5xl mx-auto p-6 text-center">
-        <div className="bg-muted p-8 rounded-xl">
-          <h2 className="text-2xl font-bold mb-2">No Active Contest</h2>
-          <p className="text-muted-foreground mb-2">
-            There are no active contests at the moment. Please check back later!
-          </p>
-          {lineArtError && (
-            <div className="text-destructive text-sm mb-4 p-2 bg-destructive/10 rounded">
-              Error: {lineArtError}
-            </div>
-          )}
-          <div className="flex flex-col gap-2 items-center">
-            <Button
-              onClick={() => generateLineArt()}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-            >
-              Generate Line Art
-            </Button>
-            <Button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors"
-            >
-              Reload Page
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <FeaturedContest
-      title={contest.title}
-      imageUrl={contest.image_url}
-      remainingTime={remainingTime}
-      contestType={contest.contest_type as any}
-      description={contest.description}
-      contestId={(contest.id || contest._id) as string}
-    />
-  );
+  return null;
 }

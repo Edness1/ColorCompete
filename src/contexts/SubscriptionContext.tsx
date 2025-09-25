@@ -10,9 +10,11 @@ type SubscriptionContextType = {
   tier: SubscriptionTier;
   remainingSubmissions: number;
   isLoading: boolean;
-  refreshSubscriptionData: () => Promise<void>;
+  refreshSubscriptionData: () => Promise<{ tier: SubscriptionTier; remaining_submissions: number } | null>;
   deductSubmission: () => Promise<boolean>;
   getSubmissionFee: () => number | null;
+  // Immediately apply a subscription snapshot returned from the API (e.g. createSubmission response)
+  applyServerSubscription: (sub: { tier?: string | null; remaining_submissions?: number }) => void;
   createCheckoutSession: (
     contestId: string,
   ) => Promise<{ sessionUrl: string | null; error: string | null }>;
@@ -59,80 +61,54 @@ export function SubscriptionProvider({
   }, [user]);
 
   const refreshSubscriptionData = async () => {
-    if (!user) return;
+    if (!user) return null;
     setIsLoading(true);
     try {
+      // Get or ensure the single subscription doc; server will reset if a new month started
       const res = await fetch(`${API_URL}/api/subscription?userId=${user._id}`);
       if (!res.ok) throw new Error("Failed to fetch subscription");
       const data = await res.json();
-
-      if (!data.subscription) {
-        // Create free tier if not found
-        const now = new Date();
-        await fetch(`${API_URL}/api/subscription`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: user._id,
-            tier: "free",
-            remaining_submissions: tierSubmissionLimits.free,
-            month: now.getMonth() + 1,
-            year: now.getFullYear(),
-          }),
+      let sub = data.subscription;
+      if (!sub) {
+        // Ensure doc exists
+        const ensure = await fetch(`${API_URL}/api/subscription/ensure-current`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user._id, tier: 'free' })
         });
-        setTier("free");
-        setRemainingSubmissions(tierSubmissionLimits.free);
-      } else {
-        console.log("Subscription data:", data.subscription);
-        const { tier, remaining_submissions, month, year } = data.subscription;
-        
-        // Handle null tier by defaulting to "free"
-        const validTier = tier || "free";
-        
-        const now = new Date();
-        if (month !== now.getMonth() + 1 || year !== now.getFullYear()) {
-          // Reset for new month
-          await fetch(`${API_URL}/api/subscription`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userId: user._id,
-              tier: validTier,
-              remaining_submissions: tierSubmissionLimits[validTier as SubscriptionTier],
-              month: now.getMonth() + 1,
-              year: now.getFullYear(),
-            }),
-          });
-          setTier(validTier as SubscriptionTier);
-          setRemainingSubmissions(tierSubmissionLimits[validTier as SubscriptionTier]);
+        if (ensure.ok) {
+          sub = await ensure.json();
         } else {
-          // If tier is null, update the database to fix it
-          if (!tier) {
-            console.log("Tier is null, updating database to set tier to 'free'");
-            await fetch(`${API_URL}/api/subscription`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                userId: user._id,
-                tier: "free",
-                remaining_submissions: remaining_submissions,
-                month: month,
-                year: year,
-              }),
-            });
-          }
-          
-          setTier(validTier as SubscriptionTier);
-          setRemainingSubmissions(remaining_submissions);
+          // Keep previous state if ensure fails
+          return null;
         }
       }
+      const validTier = (sub.tier || 'free') as SubscriptionTier;
+      const remaining = typeof sub.remaining_submissions === 'number' ? sub.remaining_submissions : tierSubmissionLimits[validTier];
+      setTier(validTier);
+      setRemainingSubmissions(remaining);
+      return { tier: validTier, remaining_submissions: remaining };
     } catch (error) {
-      setTier("free");
-      setRemainingSubmissions(tierSubmissionLimits.free);
+      // Keep existing state on failure to avoid UI showing wrong defaults
+      return null;
     } finally {
       setIsLoading(false);
     }
   };
+
+    /**
+     * Apply a server-returned subscription object directly to local state without a round-trip fetch.
+     * Useful after endpoints that already mutate & return the up-to-date subscription (e.g. createSubmission).
+     */
+    const applyServerSubscription = (sub: { tier?: string | null; remaining_submissions?: number }) => {
+      if (!sub) return;
+      if (typeof sub.remaining_submissions === 'number') {
+        setRemainingSubmissions(sub.remaining_submissions);
+      }
+      if (sub.tier) {
+        setTier((sub.tier as SubscriptionTier) || 'free');
+      }
+    };
 
   const deductSubmission = async (): Promise<boolean> => {
     console.log("deductSubmission called");
@@ -267,21 +243,17 @@ export function SubscriptionProvider({
       // Extract purchased tier and submissions from payment session metadata or response
       const purchasedTier = data.session.metadata?.planTier; // fallback or adjust as needed
       const purchasedSubmissions = tierSubmissionLimits[purchasedTier as SubscriptionTier];
-
-      // Fetch current subscription to get existing remaining submissions
+      
+      // Update or create single subscription doc: bump tier and add the purchased submissions to remaining
+      // First fetch current to get remaining
       let currentRemaining = 0;
       try {
-        const subRes = await fetch(`${API_URL}/api/subscription?userId=${user._id}`);
-        if (subRes.ok) {
-          const subData = await subRes.json();
-          currentRemaining = subData.subscription?.remaining_submissions || 0;
+        const cur = await fetch(`${API_URL}/api/subscription?userId=${user._id}`);
+        if (cur.ok) {
+          const curData = await cur.json();
+          currentRemaining = curData.subscription?.remaining_submissions || 0;
         }
-      } catch (e) {
-        // If fetch fails, assume 0
-        currentRemaining = 0;
-      }
-
-      // Update or create subscription with sum of current and purchased submissions
+      } catch {}
       await fetch(`${API_URL}/api/subscription`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -289,8 +261,6 @@ export function SubscriptionProvider({
           userId: user._id,
           tier: purchasedTier,
           remaining_submissions: currentRemaining + purchasedSubmissions,
-          month: new Date().getMonth() + 1,
-          year: new Date().getFullYear(),
         }),
       });
 
@@ -311,6 +281,7 @@ export function SubscriptionProvider({
     createCheckoutSession,
     createSubscriptionCheckout,
     verifyPaymentSession,
+    applyServerSubscription,
   };
 
   return (

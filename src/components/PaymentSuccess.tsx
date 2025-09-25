@@ -43,7 +43,6 @@ const PaymentSuccess = () => {
           toast({
             title: "Payment Successful",
             description: "Your payment was processed successfully.",
-            variant: "success",
           });
         } else {
           setError(error || "Payment verification failed");
