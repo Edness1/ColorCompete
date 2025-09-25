@@ -251,15 +251,38 @@ const FeaturedContest: React.FC<FeaturedContestProps> = (props) => {
     const showRemaining = !props.isScheduledPlaceholder && !!props.remainingTime;
     const showStartsIn = !!props.isScheduledPlaceholder && !!props.startsIn;
 
-    const downloadImage = () => {
+    const downloadImage = async () => {
       if (!props.imageUrl) return;
-      const link = document.createElement("a");
-      link.href = props.imageUrl;
-      const filename = `${(props.title || "line-art").replace(/[^a-z0-9]/gi, "-").toLowerCase()}-line-art.jpg`;
-      link.setAttribute("download", filename);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        const response = await fetch(props.imageUrl);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const filename = `${(props.title || "line-art").replace(/[^a-z0-9]/gi, "-").toLowerCase()}-line-art.jpg`;
+        link.setAttribute("download", filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+
+        toast({
+          title: "Download Complete",
+          description: `${props.title} has been downloaded to your device.`,
+        });
+
+        if (props.contestId) {
+          // Non-blocking: track the download metric if contestId is provided
+          trackDownload(props.contestId);
+        }
+      } catch (error) {
+        console.error("Download failed:", error);
+        toast({
+          title: "Download Failed",
+          description: "There was an error downloading the line art. Please try again.",
+          variant: "destructive",
+        });
+      }
     };
 
     return (
@@ -373,7 +396,7 @@ const FeaturedContest: React.FC<FeaturedContestProps> = (props) => {
             {!props.isScheduledPlaceholder && (
               <div className="flex flex-col gap-3">
                 {props.imageUrl && (
-                  <Button onClick={downloadImage} size="lg" className="w-full gap-2">
+                  <Button onClick={() => setShowDownloadModal(true)} size="lg" className="w-full gap-2">
                     <Download className="h-5 w-5" />
                     Download Line Art
                   </Button>
@@ -388,6 +411,29 @@ const FeaturedContest: React.FC<FeaturedContestProps> = (props) => {
             )}
           </div>
         </div>
+      
+      {/* Download Confirmation Modal (props branch) */}
+      {showDownloadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
+            <h3 className="text-lg font-semibold mb-4">Download Confirmation</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Click the button below to start your download.
+            </p>
+            <div className="flex justify-center">
+              <Button onClick={downloadImage} className="gap-2" size="sm">
+                <Download className="h-4 w-4" />
+                Download
+              </Button>
+            </div>
+            <div className="mt-4 text-center">
+              <Button onClick={() => setShowDownloadModal(false)} variant="outline" className="w-full">
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     );
   }
@@ -442,7 +488,7 @@ const FeaturedContest: React.FC<FeaturedContestProps> = (props) => {
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity duration-300">
                       <Button
                         onClick={() => {
-                          handleDownload();
+                          // Open confirmation first; start download from the modal to preserve user gesture
                           setShowDownloadModal(true);
                         }}
                         size="sm"
@@ -535,7 +581,7 @@ const FeaturedContest: React.FC<FeaturedContestProps> = (props) => {
           <div className="flex flex-col gap-4">
             <Button
               onClick={() => {
-                handleDownload();
+                // Open confirmation first; start download from the modal to preserve user gesture
                 setShowDownloadModal(true);
               }}
               size="lg"
@@ -556,12 +602,12 @@ const FeaturedContest: React.FC<FeaturedContestProps> = (props) => {
           <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
             <h3 className="text-lg font-semibold mb-4">Download Confirmation</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Your download should start automatically. If not, click the button below.
+              Click the button below to start your download.
             </p>
             <div className="flex justify-center">
               <Button onClick={handleDownload} className="gap-2" size="sm">
                 <Download className="h-4 w-4" />
-                Download Again
+                Download
               </Button>
             </div>
             <div className="mt-4 text-center">

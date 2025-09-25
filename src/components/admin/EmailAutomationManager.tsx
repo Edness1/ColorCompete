@@ -356,6 +356,43 @@ export function EmailAutomationManager() {
     });
   };
 
+  const handleTestAutomation = async (automation: EmailAutomation) => {
+    try {
+      const response = await fetch(API_URL+`/api/email/automations/${automation._id}/test-send-all`, {
+        method: 'POST',
+        headers: {
+          'user-id': user?._id || '',
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to send test emails');
+      alert(`Test emails attempted for "${automation.name}". Sent: ${data.sent ?? data.summary?.[0]?.sent ?? 'see logs'}`);
+    } catch (err: any) {
+      console.error('Test automation error:', err);
+      alert(`Test failed: ${err.message}`);
+    }
+  };
+
+  const handleTestAllAutomations = async () => {
+    try {
+      const response = await fetch(API_URL+`/api/email/automations/test-send-all`, {
+        method: 'POST',
+        headers: {
+          'user-id': user?._id || '',
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to send test emails for all automations');
+      const lines = (data.summary || []).map((s: any) => `${s.name}: ${s.sent}/${s.attempted}`).join('\n');
+      alert(`All automations test attempted:\n${lines}`);
+    } catch (err: any) {
+      console.error('Test all automations error:', err);
+      alert(`Test all failed: ${err.message}`);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -372,6 +409,9 @@ export function EmailAutomationManager() {
               New Automation
             </Button>
           </DialogTrigger>
+          <div className="flex gap-2 ml-4">
+            <Button variant="outline" onClick={handleTestAllAutomations}>Send Test: All Automations</Button>
+          </div>
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <form onSubmit={handleSubmit}>
               <DialogHeader>
@@ -596,6 +636,13 @@ export function EmailAutomationManager() {
                       checked={automation.isActive}
                       onCheckedChange={() => handleToggleAutomation(automation)}
                     />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTestAutomation(automation)}
+                    >
+                      Test Send
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"

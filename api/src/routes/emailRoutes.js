@@ -11,6 +11,10 @@ const emailAutomationService = require('../services/emailAutomationService');
 // Middleware to check if user is admin
 const requireAdmin = async (req, res, next) => {
   try {
+    // Local/dev bypass: allow admin routes when explicitly enabled
+    if (process.env.DEV_BYPASS_ADMIN === 'true') {
+      return next();
+    }
     const userId = req.headers['user-id'];
     if (!userId) {
       return res.status(401).json({ error: 'User ID required' });
@@ -467,6 +471,172 @@ router.post('/test-automation/:id', requireAdmin, async (req, res) => {
     
     res.json({ message: 'Test automation executed successfully' });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send a test email to all users for a specific automation (bypasses business conditions)
+router.post('/automations/:id/test-send-all', requireAdmin, async (req, res) => {
+  try {
+    const automation = await EmailAutomation.findById(req.params.id);
+    if (!automation) {
+      return res.status(404).json({ error: 'Automation not found' });
+    }
+
+    // Load recipients: all users with email
+    const users = await User.find({ email: { $exists: true, $ne: '' } }).select('_id email firstName lastName username');
+
+    // Build a broad set of test variables to maximize template replacement coverage
+    const commonData = {
+      // snake_case variables (used by some UI defaults)
+      challenge_title: 'Test Contest Title',
+      challenge_description: 'This is a test description for the latest ColorCompete contest.',
+      end_date: new Date(Date.now() + 7 * 24 * 3600 * 1000).toLocaleDateString(),
+      prize_amount: '$25 Gift Card',
+      contest_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest`,
+      winner_name: 'Alex Artist',
+      winning_submission: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/winning-submission.png`,
+      total_votes: '123',
+      results_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest/results`,
+      user_name: 'ColorCompeter',
+      user_submissions_count: '3',
+      user_wins_count: '1',
+      user_total_votes: '42',
+      dashboard_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`,
+      active_contests: '4',
+      new_members: '25',
+      total_submissions: '87',
+
+      // camelCase variables (used by service-side templates)
+      contestTitle: 'Test Contest Title',
+      contestDescription: 'This is a test description for the latest ColorCompete contest.',
+      contestPrize: '$25 Gift Card',
+      contestDeadline: new Date(Date.now() + 7 * 24 * 3600 * 1000).toLocaleDateString(),
+      votingPeriod: `${new Date().toLocaleDateString()} - ${new Date(Date.now() + 2 * 24 * 3600 * 1000).toLocaleDateString()}`,
+      contestUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest`,
+      totalSubmissions: '87',
+      totalParticipants: '54',
+      totalVotes: '123',
+      winners: [
+        { rank: '1st', winnerName: 'Alex Artist', prize: '$25', voteCount: 45, submissionImage: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/win1.png` },
+        { rank: '2nd', winnerName: 'Pat Painter', prize: '$10', voteCount: 30, submissionImage: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/win2.png` }
+      ],
+      dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`,
+      unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe`,
+      websiteUrl: process.env.FRONTEND_URL || 'http://localhost:5173'
+    };
+
+    let sent = 0;
+    const results = [];
+    for (const u of users) {
+      const perUserData = {
+        ...commonData,
+        user_name: u.firstName || u.username || 'ColorCompeter',
+        userName: u.firstName || u.username || 'ColorCompeter',
+        unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe?userId=${u._id}`
+      };
+
+      const subject = emailService.replaceTemplateVariables(automation.emailTemplate.subject, perUserData);
+      const htmlContent = emailService.replaceTemplateVariables(automation.emailTemplate.htmlContent, perUserData);
+
+      const result = await emailService.sendEmail({
+        to: { userId: u._id, email: u.email },
+        subject,
+        htmlContent,
+        automationId: automation._id
+      });
+      results.push({ email: u.email, ...result });
+      if (result.success) sent += 1;
+
+      // brief delay to avoid rate limit bursts
+      await emailService.delay(75);
+    }
+
+    // Do not mutate totals on test runs, just return a summary
+    return res.json({
+      message: 'Test emails attempted for automation',
+      automationId: automation._id,
+      attempted: users.length,
+      sent,
+      results
+    });
+  } catch (error) {
+    console.error('Error in test-send-all:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send test emails for all automations to all users
+router.post('/automations/test-send-all', requireAdmin, async (req, res) => {
+  try {
+    const automations = await EmailAutomation.find();
+    const summary = [];
+    for (const a of automations) {
+      // Reuse the endpoint logic by simulating an internal call
+      const users = await User.find({ email: { $exists: true, $ne: '' } }).select('_id email firstName lastName username');
+
+      const commonData = {
+        challenge_title: 'Test Contest Title',
+        challenge_description: 'This is a test description for the latest ColorCompete contest.',
+        end_date: new Date(Date.now() + 7 * 24 * 3600 * 1000).toLocaleDateString(),
+        prize_amount: '$25 Gift Card',
+        contest_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest`,
+        winner_name: 'Alex Artist',
+        winning_submission: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/winning.png`,
+        total_votes: '123',
+        results_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest/results`,
+        user_name: 'ColorCompeter',
+        user_submissions_count: '3',
+        user_wins_count: '1',
+        user_total_votes: '42',
+        dashboard_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`,
+        active_contests: '4',
+        new_members: '25',
+        total_submissions: '87',
+
+        contestTitle: 'Test Contest Title',
+        contestDescription: 'This is a test description for the latest ColorCompete contest.',
+        contestPrize: '$25 Gift Card',
+        contestDeadline: new Date(Date.now() + 7 * 24 * 3600 * 1000).toLocaleDateString(),
+        votingPeriod: `${new Date().toLocaleDateString()} - ${new Date(Date.now() + 2 * 24 * 3600 * 1000).toLocaleDateString()}`,
+        contestUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest`,
+        totalSubmissions: '87',
+        totalParticipants: '54',
+        totalVotes: '123',
+        winners: [
+          { rank: '1st', winnerName: 'Alex Artist', prize: '$25', voteCount: 45, submissionImage: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/win1.png` },
+          { rank: '2nd', winnerName: 'Pat Painter', prize: '$10', voteCount: 30, submissionImage: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/win2.png` }
+        ],
+        dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`,
+        unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe`,
+        websiteUrl: process.env.FRONTEND_URL || 'http://localhost:5173'
+      };
+
+      let sent = 0;
+      for (const u of users) {
+        const perUserData = {
+          ...commonData,
+          user_name: u.firstName || u.username || 'ColorCompeter',
+          userName: u.firstName || u.username || 'ColorCompeter',
+          unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe?userId=${u._id}`
+        };
+        const subject = emailService.replaceTemplateVariables(a.emailTemplate.subject, perUserData);
+        const htmlContent = emailService.replaceTemplateVariables(a.emailTemplate.htmlContent, perUserData);
+        const result = await emailService.sendEmail({
+          to: { userId: u._id, email: u.email },
+          subject,
+          htmlContent,
+          automationId: a._id
+        });
+        if (result.success) sent += 1;
+        await emailService.delay(75);
+      }
+      summary.push({ automationId: a._id, name: a.name, attempted: users.length, sent });
+    }
+
+    return res.json({ message: 'Test emails attempted for all automations', summary });
+  } catch (error) {
+    console.error('Error in automations test-send-all:', error);
     res.status(500).json({ error: error.message });
   }
 });

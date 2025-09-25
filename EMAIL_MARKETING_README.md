@@ -82,6 +82,8 @@ Only users with `isAdmin: true` in their user record can access the email market
 - `PUT /api/email/automations/:id` - Update automation
 - `PATCH /api/email/automations/:id/toggle` - Toggle automation on/off
 - `DELETE /api/email/automations/:id` - Delete automation
+ - `POST /api/email/automations/:id/test-send-all` - Send a test email for a specific automation to all users (admin only)
+ - `POST /api/email/automations/test-send-all` - Send test emails for all automations to all users (admin only)
 
 ### Analytics
 - `GET /api/email/analytics` - Get overall email statistics
@@ -180,6 +182,9 @@ Use double curly braces for template variables:
 ### Common Issues
 
 1. **Emails not sending**: Check SendGrid API key and account status
+   - Ensure `SENDGRID_API_KEY` is set in `api/.env`
+   - Verify domain is verified in SendGrid and sender identity approved
+   - For local testing without real sends, start the API with `DEV_BYPASS_ADMIN=true` to access admin endpoints, and consider using SendGrid sandbox mode or test endpoints above which do not mutate totals
 2. **High bounce rate**: Clean email list and verify addresses  
 3. **Low open rates**: Improve subject lines and send times
 4. **Gift cards not sending**: Verify Tremendous API credentials and funding
@@ -194,6 +199,7 @@ Use double curly braces for template variables:
 ## Security
 
 - All email marketing endpoints require admin authentication
+- For local testing only, you can set `DEV_BYPASS_ADMIN=true` in the environment to bypass admin checks. Do not use in production.
 - API keys should be kept secure and rotated regularly
 - Use HTTPS for all webhook endpoints
 - Monitor for unusual activity in email sending patterns
