@@ -37,11 +37,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/components/ui/use-toast";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import { API_URL } from "@/lib/utils";
+import { useContestAnalytics } from "@/hooks/useContestAnalytics";
 
 const CLOUDINARY_UPLOAD_PRESET = "cewqtwou"; // <-- set this
 const CLOUDINARY_CLOUD_NAME = "dwnqwem6e"; // <-- set this
@@ -88,6 +88,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showPaymentPrompt, setShowPaymentPrompt] = useState(false);
+  const { trackSubmission } = useContestAnalytics();
 
   // Check for payment success from URL params
   useEffect(() => {
@@ -202,10 +203,12 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       await refreshSubscriptionData();
 
       if (onSubmit) {
-        await onSubmit({
-          imageUrl,
-          ageGroup,
-        });
+        await onSubmit({ imageUrl, ageGroup });
+      }
+
+      // Track submission analytics if contest id present
+      if (contestId) {
+        trackSubmission(contestId);
       }
 
       // Refresh subscription data to ensure UI is in sync

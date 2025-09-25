@@ -23,4 +23,7 @@ router.delete('/:id', challengeController.deleteChallenge);
 // Get all contest analytics
 router.get('/analytics/contest-analytics', challengeController.getAllContestAnalytics);
 
+// Increment a contest metric (views, downloads, submissions, votes)
+router.post('/:id/analytics/:metric', challengeController.incrementContestMetric);
+
 module.exports = router;

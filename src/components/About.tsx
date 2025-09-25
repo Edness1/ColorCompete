@@ -205,10 +205,10 @@ const About = () => {
 
           <div className="prose prose-lg dark:prose-invert mx-auto space-y-6">
             <p className="text-xl leading-relaxed">
-              ColorCompete is where creativity meets friendly competition.
-              Designed for artists of all ages and skill levels, our platform
-              hosts digital coloring contests that are fun, rewarding, and
-              community-driven.
+              ColorCompete is where creativity
+              meets friendly competition. Designed for artists 18 years+ (ColorUnplugged for kids
+              coming soon) and all skill levels, our platform hosts digital coloring contests that are fun,
+              rewarding, and community-driven.
             </p>
 
             <p className="text-lg leading-relaxed">

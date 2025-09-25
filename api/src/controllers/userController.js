@@ -138,15 +138,27 @@ exports.getUserStats = async (req, res) => {
       return res.status(400).json({ message: "Missing user_id" });
     }
 
-    // Replace these with your actual models and logic
-    const totalSubmissions = await Submission.countDocuments({ user_id: user_id });
-    const winCount = await Submission.countDocuments({ user_id: user_id, isWinner: true });
-    const contestsParticipated = await Submission.distinct("contest", { user_id: user_id }).then(arr => arr.length);
+    // Count total submissions
+    const totalSubmissions = await Submission.countDocuments({ user_id });
+    // Count wins
+    const winCount = await Submission.countDocuments({ user_id, isWinner: true });
+
+    // Distinct contests (schema uses challenge_id)
+    const contestsParticipated = await Submission.distinct("challenge_id", { user_id }).then(arr => arr.length);
+
+    // Aggregate total votes across user's submissions (votes is an array on each submission)
+    const voteAggregation = await Submission.aggregate([
+      { $match: { user_id: typeof user_id === 'string' ? new (require('mongoose').Types.ObjectId)(user_id) : user_id } },
+      { $project: { voteCount: { $size: { $ifNull: ["$votes", []] } } } },
+      { $group: { _id: null, totalVotes: { $sum: "$voteCount" } } }
+    ]).catch(() => []);
+    const totalVotes = voteAggregation.length ? voteAggregation[0].totalVotes : 0;
 
     res.json({
       totalSubmissions,
       winCount,
       contestsParticipated,
+      totalVotes,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

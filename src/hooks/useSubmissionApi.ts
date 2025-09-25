@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { API_URL } from "@/lib/utils";
 
 export function useSubmissionApi() {
   const [loading, setLoading] = useState(false);
@@ -15,17 +15,13 @@ export function useSubmissionApi() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-submission_api",
-        {
-          body: { contestId, imageUrl, title, description },
-          headers: {
-            path: "create",
-          },
-        },
-      );
-
-      if (error) throw new Error(error.message);
+      const res = await fetch(`${API_URL}/api/submissions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contestId, imageUrl, title, description })
+      });
+      if (!res.ok) throw new Error('Failed to create submission');
+      const data = await res.json();
       return { data, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to create submission");
@@ -40,17 +36,10 @@ export function useSubmissionApi() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-submission_api",
-        {
-          headers: {
-            path: "user",
-          },
-        },
-      );
-
-      if (error) throw new Error(error.message);
-      return { data: data.submissions, error: null };
+      const res = await fetch(`${API_URL}/api/submissions/user`);
+      if (!res.ok) throw new Error('Failed to fetch submissions');
+      const data = await res.json();
+      return { data: data.submissions || data, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to fetch submissions");
       return { data: null, error: err };
@@ -64,18 +53,10 @@ export function useSubmissionApi() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-submission_api",
-        {
-          headers: {
-            path: "get",
-          },
-          queryParams: { id: submissionId },
-        },
-      );
-
-      if (error) throw new Error(error.message);
-      return { data: data.submission, error: null };
+      const res = await fetch(`${API_URL}/api/submissions/${submissionId}`);
+      if (!res.ok) throw new Error('Failed to fetch submission');
+      const data = await res.json();
+      return { data: data.submission || data, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to fetch submission");
       return { data: null, error: err };

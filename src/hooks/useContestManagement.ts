@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { API_URL } from "@/lib/utils";
 
 type ContestData = {
   title: string;
@@ -26,18 +26,14 @@ export function useContestManagement() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-contest_management",
-        {
-          body: contestData,
-          headers: {
-            path: "create",
-          },
-        },
-      );
-
-      if (error) throw new Error(error.message);
-      return { data: data.contest, error: null };
+      const res = await fetch(`${API_URL}/api/challenges`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contestData)
+      });
+      if (!res.ok) throw new Error('Failed to create contest');
+      const data = await res.json();
+      return { data, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to create contest");
       return { data: null, error: err };
@@ -54,18 +50,14 @@ export function useContestManagement() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-contest_management",
-        {
-          body: { id, ...contestData },
-          headers: {
-            path: "update",
-          },
-        },
-      );
-
-      if (error) throw new Error(error.message);
-      return { data: data.contest, error: null };
+      const res = await fetch(`${API_URL}/api/challenges/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contestData)
+      });
+      if (!res.ok) throw new Error('Failed to update contest');
+      const data = await res.json();
+      return { data, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to update contest");
       return { data: null, error: err };
@@ -79,18 +71,11 @@ export function useContestManagement() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-contest_management",
-        {
-          headers: {
-            path: "analytics",
-          },
-          queryParams: { id: contestId },
-        },
-      );
-
-      if (error) throw new Error(error.message);
-      return { data: data.contest, error: null };
+      const res = await fetch(`${API_URL}/api/challenges/analytics/contest-analytics`);
+      if (!res.ok) throw new Error('Failed to fetch analytics');
+      const list = await res.json();
+      const item = list.find((a: any) => a.contest_id === contestId);
+      return { data: item, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to fetch contest analytics");
       return { data: null, error: err };
@@ -108,18 +93,14 @@ export function useContestManagement() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-contest_management",
-        {
-          body: { submissionId, action, reason },
-          headers: {
-            path: "moderate",
-          },
-        },
-      );
-
-      if (error) throw new Error(error.message);
-      return { data: data.submission, error: null };
+      const res = await fetch(`${API_URL}/api/submissions/${submissionId}/moderate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, reason })
+      });
+      if (!res.ok) throw new Error('Failed to moderate submission');
+      const data = await res.json();
+      return { data, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to moderate submission");
       return { data: null, error: err };

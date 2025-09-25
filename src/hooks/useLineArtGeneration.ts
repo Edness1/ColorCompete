@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import { API_URL } from "@/lib/utils";
 
 interface LineArt {
   id: string;
@@ -22,36 +22,20 @@ export function useLineArtGeneration() {
       setIsLoading(true);
       setError(null);
 
-      // Call the Supabase Edge Function to generate line art
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-generate_line_art",
-        {
-          body: date ? { date } : {},
-        },
-      );
-
-      if (error) {
-        console.warn("Edge function error, using fallback:", error);
-        // Use fallback data if edge function fails
-        const fallbackData = {
-          id: `fallback-${new Date().toISOString().split("T")[0]}`,
-          date: new Date().toISOString().split("T")[0],
-          title: "Daily Coloring Challenge",
-          description: "A beautiful coloring page for today's challenge.",
-          imageUrl:
-            "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80",
-          bwImageUrl:
-            "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80",
-          keywords: ["coloring", "art", "challenge", "creative"],
-          artStyle: "standard" as const,
-        };
-        setLineArt(fallbackData);
-        return fallbackData;
+      // Attempt a REST fetch to future backend endpoint (placeholder)
+      // Currently no backend route exists; will intentionally fallback.
+      let data: any = null;
+      try {
+        const res = await fetch(`${API_URL}/api/line-art/daily${date ? `?date=${date}` : ""}`);
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch (e) {
+        // swallow error and use fallback below
       }
 
       if (!data) {
-        console.warn("No data received, using fallback");
-        // Use fallback data if no data received
+        console.warn("Line art endpoint unavailable, using fallback");
         const fallbackData = {
           id: `fallback-${new Date().toISOString().split("T")[0]}`,
           date: new Date().toISOString().split("T")[0],
@@ -62,7 +46,7 @@ export function useLineArtGeneration() {
           bwImageUrl:
             "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80",
           keywords: ["coloring", "art", "challenge", "creative"],
-          artStyle: "standard" as const,
+            artStyle: "standard" as const,
         };
         setLineArt(fallbackData);
         return fallbackData;

@@ -23,11 +23,14 @@ interface ContestAnalytics {
 }
 
 interface Contest {
-  id: string;
+  _id?: string; // Mongo id
+  id?: string; // fallback if normalized elsewhere
   title: string;
   status: string;
-  startDate: string;
-  endDate: string;
+  startDate?: string; // original naming in frontend
+  endDate?: string;
+  start_date?: string; // possible snake case from API
+  end_date?: string;
 }
 
 interface ContestWithAnalytics extends Contest {
@@ -53,7 +56,7 @@ export default function ContestAnalytics() {
         `${API_URL}/api/challenges`,
       );
       if (!contestsRes.ok) throw new Error("Failed to fetch contests");
-      const contests: Contest[] = await contestsRes.json();
+  const contests: Contest[] = await contestsRes.json();
 
       // Fetch analytics for all contests from the API
       const analyticsRes = await fetch(
@@ -64,10 +67,11 @@ export default function ContestAnalytics() {
 
       // Combine the data
       const combined = contests.map((contest) => {
+        const contestId = contest.id || contest._id as string;
         const contestAnalytics =
-          analytics.find((a) => a.contest_id === contest.id) || {
+          analytics.find((a) => a.contest_id === contestId) || {
             id: "",
-            contest_id: contest.id,
+            contest_id: contestId,
             views: 0,
             downloads: 0,
             submissions: 0,
@@ -78,6 +82,7 @@ export default function ContestAnalytics() {
 
         return {
           ...contest,
+          id: contestId,
           analytics: contestAnalytics,
         };
       });
@@ -164,8 +169,12 @@ export default function ContestAnalytics() {
                     <div>
                       <CardTitle className="text-lg">{contest.title}</CardTitle>
                       <CardDescription>
-                        {formatDate(contest.startDate)} -{" "}
-                        {formatDate(contest.endDate)}
+                        {formatDate(
+                          contest.startDate || contest.start_date || ""
+                        )} -{" "}
+                        {formatDate(
+                          contest.endDate || contest.end_date || ""
+                        )}
                       </CardDescription>
                     </div>
                     <div

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +29,6 @@ import axios from "axios";
 const formSchema = z
   .object({
     title: z.string().min(5, "Title must be at least 5 characters"),
-    description: z.string().min(10, "Description must be at least 10 characters"),
     lineArt: z.string().optional(),
     startDate: z.string().min(1, "Start date is required"),
     // times are enforced automatically to 11:00 UTC / +24h — not user-entered
@@ -77,7 +75,6 @@ interface ContestManagementProps {
 interface Contest {
   _id: string;
   title: string;
-  description: string;
   lineArt: string;
   startDate?: string; // ISO datetime (UTC)
   endDate?: string; // ISO datetime (UTC)
@@ -112,7 +109,6 @@ export default function ContestManagement({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: editingContest?.title || "",
-      description: editingContest?.description || "",
       lineArt: editingContest?.lineArt || "",
       startDate: initialStart || (editingContest?.startDate ? String(editingContest.startDate).slice(0, 10) : today),
       status: editingContest?.status || "draft",
@@ -125,7 +121,6 @@ export default function ContestManagement({
 
       form.reset({
         title: editingContest.title,
-        description: editingContest.description,
         lineArt: editingContest.lineArt,
         startDate: parsedStart || editingContest.startDate || today,
         status: editingContest.status,
@@ -134,7 +129,6 @@ export default function ContestManagement({
     } else {
       form.reset({
         title: "",
-        description: "",
         lineArt: "",
         startDate: today,
         status: "draft",
@@ -198,7 +192,6 @@ export default function ContestManagement({
       // Prepare the data object
       const contestData: any = {
         title: values.title,
-        description: values.description,
         // include time strings for compatibility if the server expects them
         startTime: "11:00",
         endTime: "11:00",
@@ -272,21 +265,6 @@ export default function ContestManagement({
                   <Input placeholder="Enter contest title" {...field} />
                 </FormControl>
                 <FormDescription>Give your contest a catchy, descriptive title</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Description</FormLabel>
-                <FormControl>
-                  <Textarea placeholder="Describe the contest theme and guidelines" className="min-h-[120px]" {...field} />
-                </FormControl>
-                <FormDescription>Provide clear instructions and inspiration for participants</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

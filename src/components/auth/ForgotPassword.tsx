@@ -11,7 +11,6 @@ import {
   CardTitle,
 } from "../ui/card";
 import { useToast } from "../ui/use-toast";
-import { supabase } from "../../lib/supabase";
 import { ArrowLeft, Mail } from "lucide-react";
 
 export default function ForgotPassword() {
@@ -25,11 +24,16 @@ export default function ForgotPassword() {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      // Call REST API password reset endpoint (placeholder)
+      const res = await fetch(`/api/users/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, redirectUrl: `${window.location.origin}/reset-password` }),
       });
-
-      if (error) throw error;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ message: "Failed to request password reset" }));
+        throw new Error(data.message || "Failed to request password reset");
+      }
 
       setIsSubmitted(true);
       toast({

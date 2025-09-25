@@ -283,7 +283,7 @@ const Home = () => {
                       <p className="font-medium">{submission.artistName}</p>
                       <div className="flex items-center">
                         <span className="text-sm text-muted-foreground mr-1">
-                          {submission.votes}
+                          {Array.isArray(submission.votes) ? submission.votes.length : (submission.votes ?? 0)}
                         </span>
                         <svg
                           xmlns="http://www.w3.org/2000/svg"

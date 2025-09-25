@@ -21,7 +21,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/lib/supabase";
 import { MainHeader } from "./header";
 import { MainFooter } from "./footer";
 import { API_URL } from "@/lib/utils";
@@ -188,6 +187,7 @@ const GalleryView = ({
   }, [user]);
 
   const handleVote = async (id: string, hasVoted: boolean) => {
+    if (hasVoted) return; // already voted, ignore
     await toggleVote(id, hasVoted);
   };
 
@@ -403,13 +403,9 @@ const GalleryView = ({
                           variant="ghost"
                           size="sm"
                           className="p-1 h-auto"
-                          onClick={() => handleVote(submission.id)}
-                          disabled={isVoting}
-                          title={
-                            submission.hasVoted
-                              ? "Remove vote"
-                              : "Vote for this artwork"
-                          }
+                          onClick={() => handleVote(submission.id, submission.hasVoted)}
+                          disabled={isVoting || submission.hasVoted}
+                          title={submission.hasVoted ? "You already voted" : "Vote for this artwork"}
                         >
                           {isVoting ? (
                             <Loader2 className="h-4 w-4 animate-spin" />

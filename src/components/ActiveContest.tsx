@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import FeaturedContest from "./FeaturedContest";
 import { Skeleton } from "./ui/skeleton";
 import { useContestAnalytics } from "@/hooks/useContestAnalytics";
@@ -7,14 +6,15 @@ import { useLineArtGeneration } from "@/hooks/useLineArtGeneration";
 import { Button } from "./ui/button";
 
 interface Contest {
-  id: string;
+  _id?: string;
+  id?: string;
   title: string;
   description: string;
   image_url: string;
   start_date: string;
   end_date: string;
-  contest_type: "traditional" | "digital";
-  status: "draft" | "scheduled" | "active" | "completed";
+  contest_type: string; // backend free-form currently
+  status: string;
 }
 
 export default function ActiveContest() {
@@ -38,82 +38,35 @@ export default function ActiveContest() {
         // Generate line art as a fallback regardless of contest availability
         generateLineArt();
 
-        const now = new Date().toISOString();
+        // Fetch contests list from REST API
+        const res = await fetch('/api/challenges');
+        if (!res.ok) throw new Error('Failed to fetch contests');
+        const contests: Contest[] = await res.json();
 
-        // Check if contests table exists by trying a simple count query first
-        const { count, error: countError } = await supabase
-          .from("contests")
-          .select("*", { count: "exact", head: true });
-
-        if (countError) {
-          // If table doesn't exist or other error, just use line art
-          console.error("Contests table error:", countError);
-          return;
+        const now = new Date();
+        const active = contests.find(c => c.status === 'active');
+        let selected = active;
+        if (!selected) {
+          const scheduled = contests
+            .filter(c => c.status === 'scheduled')
+            .sort((a,b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())[0];
+          selected = scheduled;
         }
-
-        // Fetch the currently active contest
-        const { data, error } = await supabase
-          .from("contests")
-          .select("*")
-          .eq("status", "active")
-          .lte("start_date", now)
-          .gte("end_date", now)
-          .order("start_date", { ascending: false })
-          .limit(1)
-          .single();
-
-        if (error) {
-          if (error.code === "PGRST116") {
-            // No active contest found, try to get scheduled contest
-            const { data: scheduledData, error: scheduledError } =
-              await supabase
-                .from("contests")
-                .select("*")
-                .eq("status", "scheduled")
-                .gt("start_date", now)
-                .order("start_date", { ascending: true })
-                .limit(1)
-                .single();
-
-            if (scheduledError && scheduledError.code !== "PGRST116") {
-              console.warn(
-                "Scheduled contest query issue:",
-                scheduledError.message,
-              );
+        if (!selected) {
+          const completed = contests
+            .filter(c => c.status === 'completed')
+            .sort((a,b) => new Date(b.end_date).getTime() - new Date(a.end_date).getTime())[0];
+          selected = completed;
+        }
+        if (selected) {
+          setContest(selected);
+          const viewContestId = selected.id || selected._id;
+          if (viewContestId) {
+            const sessionKey = `contest_viewed_${viewContestId}`;
+            if (!sessionStorage.getItem(sessionKey)) {
+              trackView(viewContestId);
+              sessionStorage.setItem(sessionKey, '1');
             }
-
-            if (scheduledData) {
-              setContest(scheduledData);
-            } else {
-              // If no scheduled contest, get the most recent completed contest
-              const { data: completedData, error: completedError } =
-                await supabase
-                  .from("contests")
-                  .select("*")
-                  .eq("status", "completed")
-                  .order("end_date", { ascending: false })
-                  .limit(1)
-                  .single();
-
-              if (completedError && completedError.code !== "PGRST116") {
-                console.warn(
-                  "Completed contest query issue:",
-                  completedError.message,
-                );
-              }
-
-              if (completedData) {
-                setContest(completedData);
-              }
-            }
-          } else {
-            console.error(`Active contest query issue: ${error.message}`);
-          }
-        } else {
-          setContest(data);
-          // Track view for analytics
-          if (data) {
-            trackView(data.id);
           }
         }
       } catch (err) {
@@ -257,12 +210,12 @@ export default function ActiveContest() {
 
   return (
     <FeaturedContest
-      artworkTitle={contest.title}
-      artworkImage={contest.image_url}
+      title={contest.title}
+      imageUrl={contest.image_url}
       remainingTime={remainingTime}
-      contestType={contest.contest_type}
+      contestType={contest.contest_type as any}
       description={contest.description}
-      contestId={contest.id}
+      contestId={(contest.id || contest._id) as string}
     />
   );
 }

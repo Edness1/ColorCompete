@@ -28,14 +28,14 @@ import {
   Receipt,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { API_URL } from "@/lib/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 
 interface BillingRecord {
   id: string;
-  date: string;
-  amount: number;
+  date: string; // ISO
+  amount: number; // dollars
   status: "paid" | "pending" | "failed" | "refunded";
   description: string;
   invoice_url?: string;
@@ -50,96 +50,49 @@ const BillingHistory = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [totalSpent, setTotalSpent] = useState(0);
 
-  // Mock data for demonstration
+  // Mock fallback data if API unavailable
   const mockBillingHistory: BillingRecord[] = [
-    {
-      id: "inv_001",
-      date: "2024-01-15",
-      amount: 19.99,
-      status: "paid",
-      description: "Premium Plan - January 2024",
-      invoice_url: "#",
-      payment_method: "•••• 4242",
-      subscription_tier: "premium",
-    },
-    {
-      id: "inv_002",
-      date: "2023-12-15",
-      amount: 19.99,
-      status: "paid",
-      description: "Premium Plan - December 2023",
-      invoice_url: "#",
-      payment_method: "•••• 4242",
-      subscription_tier: "premium",
-    },
-    {
-      id: "inv_003",
-      date: "2023-11-15",
-      amount: 9.99,
-      status: "paid",
-      description: "Pro Plan - November 2023",
-      invoice_url: "#",
-      payment_method: "•••• 4242",
-      subscription_tier: "pro",
-    },
-    {
-      id: "inv_004",
-      date: "2023-10-15",
-      amount: 9.99,
-      status: "paid",
-      description: "Pro Plan - October 2023",
-      invoice_url: "#",
-      payment_method: "•••• 4242",
-      subscription_tier: "pro",
-    },
-    {
-      id: "inv_005",
-      date: "2023-09-15",
-      amount: 9.99,
-      status: "failed",
-      description: "Pro Plan - September 2023",
-      payment_method: "•••• 4242",
-      subscription_tier: "pro",
-    },
+    { id: "inv_001", date: "2024-01-15T12:00:00Z", amount: 19.99, status: "paid", description: "Premium Plan - January 2024", invoice_url: "#", payment_method: "•••• 4242", subscription_tier: "premium" },
+    { id: "inv_002", date: "2023-12-15T12:00:00Z", amount: 19.99, status: "paid", description: "Premium Plan - December 2023", invoice_url: "#", payment_method: "•••• 4242", subscription_tier: "premium" },
+    { id: "inv_003", date: "2023-11-15T12:00:00Z", amount: 9.99, status: "paid", description: "Pro Plan - November 2023", invoice_url: "#", payment_method: "•••• 4242", subscription_tier: "pro" },
+    { id: "inv_004", date: "2023-10-15T12:00:00Z", amount: 9.99, status: "paid", description: "Pro Plan - October 2023", invoice_url: "#", payment_method: "•••• 4242", subscription_tier: "pro" },
+    { id: "inv_005", date: "2023-09-15T12:00:00Z", amount: 9.99, status: "failed", description: "Pro Plan - September 2023", payment_method: "•••• 4242", subscription_tier: "pro" },
   ];
 
   useEffect(() => {
     const fetchBillingHistory = async () => {
       if (!user) {
+        // No user: use mock data
+        setBillingHistory(mockBillingHistory);
+        setTotalSpent(
+          mockBillingHistory
+            .filter((r) => r.status === "paid")
+            .reduce((sum, r) => sum + r.amount, 0),
+        );
         setIsLoading(false);
         return;
       }
-
       try {
-        // Try to fetch from Supabase first
-        const { data, error } = await supabase
-          .from("billing_history")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false });
-
-        if (error) {
-          console.log("No billing history table found, using mock data");
-          setBillingHistory(mockBillingHistory);
-        } else if (data && data.length > 0) {
-          setBillingHistory(
-            data.map((record: any) => ({
-              id: record.id,
-              date: record.created_at,
-              amount: record.amount / 100, // Convert from cents
-              status: record.status,
-              description: record.description,
-              invoice_url: record.invoice_url,
-              payment_method: record.payment_method,
-              subscription_tier: record.subscription_tier,
-            })),
-          );
-        } else {
-          setBillingHistory(mockBillingHistory);
-        }
-      } catch (error) {
-        console.error("Error fetching billing history:", error);
+        const res = await fetch(
+          `${API_URL}/api/billing/history?user_id=${user._id}`,
+        );
+        if (!res.ok) throw new Error("Failed to fetch billing history");
+        const json = await res.json();
+        const records: BillingRecord[] = json.records || json || [];
+        setBillingHistory(records);
+        setTotalSpent(
+          records
+            .filter((r) => r.status === "paid")
+            .reduce((sum, r) => sum + r.amount, 0),
+        );
+      } catch (e) {
+        console.warn("Billing API unavailable, using mock data", e);
         setBillingHistory(mockBillingHistory);
+        setTotalSpent(
+          mockBillingHistory
+            .filter((r) => r.status === "paid")
+            .reduce((sum, r) => sum + r.amount, 0),
+        );
       } finally {
         setIsLoading(false);
       }
@@ -148,35 +101,32 @@ const BillingHistory = () => {
     fetchBillingHistory();
   }, [user]);
 
-  useEffect(() => {
-    const total = billingHistory
-      .filter((record) => record.status === "paid")
-      .reduce((sum, record) => sum + record.amount, 0);
-    setTotalSpent(total);
-  }, [billingHistory]);
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "paid":
-        return (
-          <Badge variant="default" className="bg-green-500">
-            Paid
-          </Badge>
-        );
-      case "pending":
-        return <Badge variant="secondary">Pending</Badge>;
-      case "failed":
-        return <Badge variant="destructive">Failed</Badge>;
-      case "refunded":
-        return <Badge variant="outline">Refunded</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
+  const handleDownloadInvoice = (invoiceUrl: string) => {
+    if (invoiceUrl && invoiceUrl !== "#") window.open(invoiceUrl, "_blank");
   };
 
-  const handleDownloadInvoice = (invoiceUrl: string) => {
-    if (invoiceUrl && invoiceUrl !== "#") {
-      window.open(invoiceUrl, "_blank");
+  const getStatusBadge = (status: BillingRecord["status"]) => {
+    switch (status) {
+      case "paid":
+        return <Badge className="bg-green-500/15 text-green-600">Paid</Badge>;
+      case "pending":
+        return (
+          <Badge variant="secondary" className="bg-amber-500/15 text-amber-600">
+            Pending
+          </Badge>
+        );
+      case "failed":
+        return (
+          <Badge variant="destructive" className="bg-red-500/15 text-red-600">
+            Failed
+          </Badge>
+        );
+      case "refunded":
+        return (
+          <Badge className="bg-blue-500/15 text-blue-600">Refunded</Badge>
+        );
+      default:
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 

@@ -149,3 +149,36 @@ exports.getAllContestAnalytics = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Increment a specific analytics metric for a contest
+exports.incrementContestMetric = async (req, res) => {
+  try {
+    const { id, metric } = { id: req.params.id, metric: req.params.metric };
+    const allowedMetrics = ['views', 'downloads', 'submissions', 'votes'];
+
+    if (!allowedMetrics.includes(metric)) {
+      return res.status(400).json({ message: 'Invalid metric type' });
+    }
+
+    // Ensure contest exists
+    const challenge = await Challenge.findById(id);
+    if (!challenge) {
+      return res.status(404).json({ message: 'Challenge not found' });
+    }
+
+    // Find existing analytics doc or create one
+    let analytics = await ContestAnalytics.findOne({ contest_id: id });
+    if (!analytics) {
+      analytics = new ContestAnalytics({ contest_id: id });
+    }
+
+    analytics[metric] = (analytics[metric] || 0) + 1;
+    analytics.updated_at = new Date();
+    await analytics.save();
+
+    res.status(200).json(analytics);
+  } catch (error) {
+    console.error('Error incrementing contest metric:', error);
+    res.status(500).json({ message: error.message });
+  }
+};

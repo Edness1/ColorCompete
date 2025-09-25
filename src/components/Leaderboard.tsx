@@ -63,29 +63,88 @@ const Leaderboard = ({}: LeaderboardProps) => {
   const [activeTab, setActiveTab] = useState("current");
   const [contestFilter, setContestFilter] = useState("all");
   const [ageFilter, setAgeFilter] = useState("all");
-  const [currentLeaders, setCurrentLeaders] = useState<LeaderboardEntry[]>([]);
-  const [weeklyLeaders, setWeeklyLeaders] = useState<LeaderboardEntry[]>([]);
-  const [monthlyLeaders, setMonthlyLeaders] = useState<LeaderboardEntry[]>([]);
-  const [allTimeLeaders, setAllTimeLeaders] = useState<LeaderboardEntry[]>([]);
+  const [allSubmissions, setAllSubmissions] = useState<LeaderboardEntry[]>([]);
+  const [derivedCurrent, setDerivedCurrent] = useState<LeaderboardEntry[]>([]);
+  const [derivedWeekly, setDerivedWeekly] = useState<LeaderboardEntry[]>([]);
+  const [derivedMonthly, setDerivedMonthly] = useState<LeaderboardEntry[]>([]);
+  const [derivedAllTime, setDerivedAllTime] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([
-      fetch(API_URL+"/api/submissions/submissions/current/now").then((res) => res.json()),
-      fetch(API_URL+"/api/submissions/submissions/weekly/now").then((res) => res.json()),
-      fetch(API_URL+"/api/submissions/submissions/monthly/now").then((res) => res.json()),
-      fetch(API_URL+"/api/submissions/submissions/all-time/now").then((res) => res.json()),
-    ])
-      .then(([current, weekly, monthly, allTime]) => {
-        console.log(current, weekly, monthly, allTime);
-        setCurrentLeaders(current);
-        setWeeklyLeaders(weekly);
-        setMonthlyLeaders(monthly);
-        setAllTimeLeaders(allTime);
+    fetch(`${API_URL}/api/submissions`)
+      .then(res => res.json())
+      .then(data => {
+        if (!Array.isArray(data)) return;
+        const normalized: LeaderboardEntry[] = data.map((item: any) => {
+          const votesLength = Array.isArray(item.votes) ? item.votes.length : (typeof item.votes === 'number' ? item.votes : 0);
+          const rawUrl = item.file_path || item.public_url || item.submissionUrl || item.imageUrl;
+          // Normalize relative paths (e.g., uploads/xyz.png) to absolute if API_URL provided
+          const submissionUrl = rawUrl && /^https?:/i.test(rawUrl)
+            ? rawUrl
+            : rawUrl
+              ? `${API_URL.replace(/\/$/, '')}/${rawUrl.replace(/^\//, '')}`
+              : undefined;
+          return {
+            rank: 0,
+            userId: item.user_id || item.userId || 'unknown',
+            username: item.profiles?.username || item.username || 'Anonymous',
+            avatarUrl: item.profiles?.avatar_url || item.avatar_url || '',
+            score: votesLength,
+            submissionId: item._id || item.id,
+            submissionUrl,
+            contestType: item.contest_type || item.contestType,
+            ageGroup: item.age_group || item.ageGroup,
+            date: item.created_at || item.createdAt || item.submissionDate,
+          };
+        });
+        setAllSubmissions(normalized);
       })
       .finally(() => setLoading(false));
   }, []);
+
+  // Derive time windows similar to GalleryView
+  useEffect(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfWeek = new Date(startOfToday); // assuming week starts Sunday
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const toTime = (d?: string) => {
+      if (!d) return 0;
+      const t = new Date(d).getTime();
+      return isNaN(t) ? 0 : t;
+    };
+
+    const todayEntries = allSubmissions.filter(e => {
+      const t = toTime(e.date);
+      return t >= startOfToday.getTime();
+    });
+    const weekEntries = allSubmissions.filter(e => {
+      const t = toTime(e.date);
+      return t >= startOfWeek.getTime();
+    });
+    const monthEntries = allSubmissions.filter(e => {
+      const t = toTime(e.date);
+      return t >= startOfMonth.getTime();
+    });
+
+    function rank(list: LeaderboardEntry[]): LeaderboardEntry[] {
+      // Sort by score desc then date asc (earlier gets higher if tie)
+      const sorted = [...list].sort((a,b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        const ta = toTime(a.date); const tb = toTime(b.date);
+        return ta - tb;
+      });
+      return sorted.map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+    }
+
+    setDerivedCurrent(rank(todayEntries));
+    setDerivedWeekly(rank(weekEntries));
+    setDerivedMonthly(rank(monthEntries));
+    setDerivedAllTime(rank(allSubmissions));
+  }, [allSubmissions]);
 
   const filterEntries = (entries: LeaderboardEntry[]) => {
     return entries.filter((entry) => {
@@ -100,30 +159,15 @@ const Leaderboard = ({}: LeaderboardProps) => {
   const getActiveLeaderboard = () => {
     switch (activeTab) {
       case "current":
-        // Ensure only submissions from the current local calendar day appear.
-        const today = new Date();
-        const isSameLocalDay = (dateStr?: string) => {
-          if (!dateStr) return true; // keep if date missing
-          if (dateStr === "Today") return true;
-          const d = new Date(dateStr);
-            if (isNaN(d.getTime())) return true; // preserve unparseable labels just in case
-          return (
-            d.getFullYear() === today.getFullYear() &&
-            d.getMonth() === today.getMonth() &&
-            d.getDate() === today.getDate()
-          );
-        };
-        return filterEntries(
-          currentLeaders.filter((entry) => isSameLocalDay(entry.date))
-        );
+        return filterEntries(derivedCurrent);
       case "weekly":
-        return filterEntries(weeklyLeaders);
+        return filterEntries(derivedWeekly);
       case "monthly":
-        return filterEntries(monthlyLeaders);
+        return filterEntries(derivedMonthly);
       case "all-time":
-        return filterEntries(allTimeLeaders);
+        return filterEntries(derivedAllTime);
       default:
-        return filterEntries(currentLeaders);
+        return filterEntries(derivedCurrent);
     }
   };
 
@@ -194,31 +238,8 @@ const Leaderboard = ({}: LeaderboardProps) => {
                     setActiveTab(tab);
                     setLoading(true);
                     let endpoint = "";
-                    switch (tab) {
-                      case "current":
-                        endpoint = "/api/submissions/submissions/current/now";
-                        break;
-                      case "weekly":
-                        endpoint = "/api/submissions/submissions/weekly/now";
-                        break;
-                      case "monthly":
-                        endpoint = "/api/submissions/submissions/monthly/now";
-                        break;
-                      case "all-time":
-                        endpoint = "/api/submissions/submissions/all-time/now";
-                        break;
-                      default:
-                        endpoint = "/api/submissions/submissions/current/now";
-                    }
-                    fetch(API_URL + endpoint)
-                      .then((res) => res.json())
-                      .then((data) => {
-                        if (tab === "current") setCurrentLeaders(data);
-                        if (tab === "weekly") setWeeklyLeaders(data);
-                        if (tab === "monthly") setMonthlyLeaders(data);
-                        if (tab === "all-time") setAllTimeLeaders(data);
-                      })
-                      .finally(() => setLoading(false));
+                    // On tab change we don't need a refetch; data derived locally.
+                    setLoading(false);
                   }}
                   className="w-full sm:w-auto"
                 >
@@ -261,7 +282,7 @@ const Leaderboard = ({}: LeaderboardProps) => {
                       <TableHead className="w-[80px]">Rank</TableHead>
                       <TableHead>Artist</TableHead>
                       <TableHead>Score</TableHead>
-                      {activeTab !== "all-time" && <TableHead>Submission</TableHead>}
+                      <TableHead>Submission</TableHead>
                       <TableHead className="text-right">Date</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -296,19 +317,20 @@ const Leaderboard = ({}: LeaderboardProps) => {
                               />
                             </div>
                           </TableCell>
-                          {activeTab !== "all-time" && (
-                            <TableCell>
-                              {entry.submissionUrl && (
-                                <div className="h-10 w-10 rounded overflow-hidden">
-                                  <img
-                                    src={entry.submissionUrl}
-                                    alt={`Submission by ${entry.username}`}
-                                    className="h-full w-full object-cover"
-                                  />
-                                </div>
+                          <TableCell>
+                            <div className="h-10 w-10 rounded overflow-hidden bg-muted flex items-center justify-center text-[10px] uppercase tracking-wide">
+                              {entry.submissionUrl ? (
+                                <img
+                                  src={entry.submissionUrl}
+                                  alt={`Submission by ${entry.username}`}
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }}
+                                />
+                              ) : (
+                                <span className="text-muted-foreground">N/A</span>
                               )}
-                            </TableCell>
-                          )}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
                               {entry.date && (
@@ -323,7 +345,7 @@ const Leaderboard = ({}: LeaderboardProps) => {
                     ) : (
                       <TableRow>
                         <TableCell
-                          colSpan={5}
+                          colSpan={6}
                           className="text-center py-8 text-muted-foreground"
                         >
                           No entries found for the selected filters

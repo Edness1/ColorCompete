@@ -1,6 +1,25 @@
-# React + TypeScript + Vite
+# ColorCompete Frontend (React + TypeScript + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This project is now a pure REST + MongoDB stack (Express backend under `/api`). All prior Supabase SDK usage and Edge Functions have been removed. Any lingering references in comments are informational only and can be safely ignored or pruned. Authentication, submissions, contests, analytics, subscriptions, billing, and voting all communicate exclusively with the `/api` endpoints.
+
+If you previously configured `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, they are no longer required and can be deleted from environment files and deployment configuration.
+
+Key frontend domains now:
+- Contest CRUD & scheduling: `GET/POST/PUT/DELETE /api/challenges`
+- Contest analytics increment: `POST /api/challenges/:id/analytics/:metric` (metrics: views, downloads, submissions, votes)
+- Submissions: `POST /api/submissions`, `GET /api/submissions`, user-specific at `/api/submissions/user`, moderation at `/api/submissions/:id/moderate`
+- Voting: `POST /api/submissions/submissions/:id/vote`, checks and counts via related routes
+- Subscription & credits: `GET/PUT/POST /api/subscription`, deduction `POST /api/subscription/deduct` (legacy), integrated decrement in submission create
+- Stripe checkout: `/api/stripe/checkout-session`, `/api/stripe/subscription-session`, `/api/stripe/verify-session`
+
+Planned (placeholder) endpoints:
+- Line art daily generation: `GET /api/line-art/daily?date=YYYY-MM-DD` (currently falls back to a static sample on the frontend)
+
+---
+
+## Development Template Notes (Original Vite Scaffolding)
+
+The original Vite + React template notes are preserved below for reference.
 
 Currently, two official plugins are available:
 

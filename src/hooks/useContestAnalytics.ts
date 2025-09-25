@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { supabase } from "@/lib/supabase";
+import { API_URL } from "@/lib/utils";
 
 type MetricType = "views" | "downloads" | "submissions" | "votes";
 
@@ -9,17 +9,15 @@ export function useContestAnalytics() {
       if (!contestId) return;
 
       try {
-        await supabase.functions.invoke(
-          "supabase-functions-track_contest_view",
-          {
-            body: { contestId, metricType },
-          },
+        const res = await fetch(
+          `${API_URL}/api/challenges/${contestId}/analytics/${metricType}`,
+          { method: 'POST' }
         );
+        if (!res.ok) {
+          console.error('Failed to increment contest metric', metricType, contestId);
+        }
       } catch (error) {
-        console.error(
-          `Error tracking ${metricType} for contest ${contestId}:`,
-          error,
-        );
+        console.error(`Error tracking ${metricType} for contest ${contestId}:`, error);
       }
     },
     [],

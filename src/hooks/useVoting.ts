@@ -35,7 +35,7 @@ export function useVoting({
     }
   };
 
-  // Function to toggle a vote (add or remove)
+  // One-way vote: user can only add a vote once. Subsequent attempts are ignored.
   const toggleVote = async (submissionId: string, currentHasVoted?: boolean) => {
     if (!user) {
       toast({
@@ -49,17 +49,21 @@ export function useVoting({
     setIsVoting(true);
 
     try {
-      // Use the provided currentHasVoted state, or fall back to checking the server
+      // Determine existing vote state
       const hasVoted = currentHasVoted !== undefined ? currentHasVoted : await checkUserVote(submissionId);
-
-      // Determine the action based on current state
-      const action = hasVoted ? "DELETE" : "POST";
-      const shouldRemove = hasVoted;
+      if (hasVoted) {
+        toast({
+          title: "Vote Already Counted",
+          description: "You have already voted for this submission.",
+        });
+        onVoteSuccess(submissionId, true);
+        return true;
+      }
 
       const response = await fetch(
         `${API_URL}/api/submissions/submissions/${submissionId}/vote`,
         {
-          method: action,
+          method: 'POST',
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: user._id }),
         },
@@ -68,69 +72,36 @@ export function useVoting({
       if (response.ok) {
         const data = await response.json();
         const newVoteCount = data.voteCount || data.vote_count || data.votes;
-
-        if (shouldRemove) {
-          toast({
-            title: "Vote Removed",
-            description: "Your vote has been removed.",
-          });
-          onVoteSuccess(submissionId, false, newVoteCount);
-          return false;
-        } else {
-          toast({
-            title: "Vote Recorded",
-            description: "Your vote has been counted!",
-          });
-          
-          // Optionally track vote if your API returns contest_id
-          if (data?.contest_id) {
-            trackVote(data.contest_id);
-          }
-          
-          onVoteSuccess(submissionId, true, newVoteCount);
-          return true;
-        }
+        toast({
+          title: "Vote Recorded",
+          description: "Your vote has been counted!",
+        });
+        if (data?.contest_id) trackVote(data.contest_id);
+        onVoteSuccess(submissionId, true, newVoteCount);
+        return true;
       } else {
-        // If the request failed, try the opposite action
-        const oppositeAction = shouldRemove ? "POST" : "DELETE";
-        const fallbackResponse = await fetch(
-          `${API_URL}/api/submissions/submissions/${submissionId}/vote`,
-          {
-            method: oppositeAction,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: user._id }),
-          },
-        );
-
-        if (!fallbackResponse.ok) {
-          throw new Error(`Failed to ${shouldRemove ? 'add' : 'remove'} vote`);
+        // Handle voting closed explicitly (403 from server with code VOTING_CLOSED)
+        if (response.status === 403) {
+          try {
+            const errData = await response.json();
+            if (errData?.code === 'VOTING_CLOSED') {
+              toast({
+                title: 'Voting Closed',
+                description: 'This contest has ended. Voting is no longer permitted.',
+                variant: 'destructive'
+              });
+              return hasVoted; // keep existing state
+            }
+            if (errData?.code === 'VOTE_PERMANENT') {
+              toast({
+                title: 'Vote Permanent',
+                description: 'Votes cannot be removed once cast.',
+              });
+              return true;
+            }
+          } catch {/* ignore json parse errors */}
         }
-
-        const fallbackData = await fallbackResponse.json();
-        const newVoteCount = fallbackData.voteCount || fallbackData.vote_count || fallbackData.votes;
-
-        if (!shouldRemove) {
-          // We tried to add but failed, so we removed instead
-          toast({
-            title: "Vote Removed",
-            description: "Your vote has been removed.",
-          });
-          onVoteSuccess(submissionId, false, newVoteCount);
-          return false;
-        } else {
-          // We tried to remove but failed, so we added instead
-          toast({
-            title: "Vote Recorded",
-            description: "Your vote has been counted!",
-          });
-          
-          if (fallbackData?.contest_id) {
-            trackVote(fallbackData.contest_id);
-          }
-          
-          onVoteSuccess(submissionId, true, newVoteCount);
-          return true;
-        }
+        throw new Error('Failed to add vote');
       }
     } catch (error) {
       console.error("Error toggling vote:", error);

@@ -49,7 +49,6 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useUserStats } from "@/hooks/useUserStats";
-import { supabase } from "@/lib/supabase";
 import { Link } from "react-router-dom";
 import { MainHeader } from "./header";
 import { API_URL } from "@/lib/utils";
@@ -346,6 +345,7 @@ const UserProfile = ({
   const submissions = user ? userSubmissions : [];
   const achievements = user ? userAchievements : [];
 
+
   // Function to render the correct icon for badges
   const renderBadgeIcon = (iconName: string, iconColor: string) => {
     const iconClass = `h-8 w-8 ${iconColor}`;
@@ -548,7 +548,9 @@ const UserProfile = ({
                       <span className="text-sm text-muted-foreground">
                         {submission.date}
                       </span>
-                      <Badge>{submission.votes} votes</Badge>
+                      <Badge>
+                        {Array.isArray(submission.votes) ? submission.votes.length : (submission.votes ?? 0)} votes
+                      </Badge>
                     </CardFooter>
                   </Card>
                 ))}

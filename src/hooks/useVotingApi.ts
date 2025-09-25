@@ -1,26 +1,27 @@
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useContestAnalytics } from "./useContestAnalytics";
+import { API_URL } from "@/lib/utils";
 
 export function useVotingApi() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { trackVote } = useContestAnalytics();
 
   const castVote = async (submissionId: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-voting_api",
-        {
-          body: { submissionId },
-          headers: {
-            path: "cast",
-          },
-        },
-      );
-
-      if (error) throw new Error(error.message);
+      const res = await fetch(`${API_URL}/api/submissions/submissions/${submissionId}/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (!res.ok) throw new Error('Failed to cast vote');
+      const data = await res.json();
+      if (data?.contest_id) {
+        trackVote(data.contest_id);
+      }
       return { data, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to cast vote");
@@ -35,18 +36,10 @@ export function useVotingApi() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-voting_api",
-        {
-          headers: {
-            path: "check",
-          },
-          queryParams: { submissionId },
-        },
-      );
-
-      if (error) throw new Error(error.message);
-      return { hasVoted: data.hasVoted, error: null };
+      const res = await fetch(`${API_URL}/api/submissions/submissions/${submissionId}/vote`);
+      if (!res.ok) return { hasVoted: false, error: null };
+      const data = await res.json();
+      return { hasVoted: !!data.hasVoted, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to check vote status");
       return { hasVoted: false, error: err };
@@ -60,18 +53,10 @@ export function useVotingApi() {
     setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-voting_api",
-        {
-          headers: {
-            path: "counts",
-          },
-          queryParams: { contestId },
-        },
-      );
-
-      if (error) throw new Error(error.message);
-      return { data: data.submissions, error: null };
+      const res = await fetch(`${API_URL}/api/submissions/contests/${contestId}/vote-counts`);
+      if (!res.ok) throw new Error('Failed to fetch vote counts');
+      const data = await res.json();
+      return { data: data.submissions || data, error: null };
     } catch (err: any) {
       setError(err.message || "Failed to fetch vote counts");
       return { data: null, error: err };
