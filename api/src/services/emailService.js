@@ -153,11 +153,74 @@ class EmailService {
 
   // Replace template variables
   replaceTemplateVariables(template, variables) {
+    if (!template || !variables) return template;
+
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const toSnake = (s) => String(s)
+      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_|_$/g, '')
+      .toLowerCase();
+    const toCamel = (s) => String(s)
+      .toLowerCase()
+      .replace(/[_-](\w)/g, (_, c) => c.toUpperCase());
+
+    // Synonym groups: any provided key in a group will satisfy all others
+    const KEY_GROUPS = [
+      // Names
+      ['user_name', 'first_name', 'userName', 'firstName'],
+      ['last_name', 'lastName'],
+      ['full_name', 'fullName'],
+      // Contest fields
+      ['challenge_title', 'contest_title', 'contestTitle'],
+      ['challenge_description', 'contest_description', 'contestDescription'],
+      ['end_date', 'contest_end_date', 'contestDeadline'],
+      ['prize_amount', 'contest_prize', 'contestPrize'],
+      ['contest_url', 'contestUrl'],
+      ['results_url', 'contestResultsUrl'],
+      // User metrics
+      ['submissions_count', 'user_submissions_count', 'submission_count', 'submissionsCount', 'submissionCount'],
+      ['wins_count', 'user_wins_count', 'win_count', 'winsCount', 'winCount'],
+      ['votes_count', 'user_total_votes', 'vote_count', 'votesCount', 'voteCount'],
+      // Totals
+      ['total_submissions', 'total_submissions_count', 'totalSubmissions', 'totalSubmissionsCount'],
+      ['total_votes', 'total_votes_count', 'totalVotes', 'totalVotesCount'],
+      ['total_participants', 'total_participants_count', 'totalParticipants', 'totalParticipantsCount'],
+      // URLs
+      ['dashboard_url', 'dashboardUrl'],
+      ['unsubscribe_url', 'unsubscribeUrl'],
+      ['website_url', 'websiteUrl']
+    ];
+
     let result = template;
-    Object.keys(variables).forEach(key => {
-      const regex = new RegExp(`{{${key}}}`, 'g');
-      result = result.replace(regex, variables[key]);
-    });
+
+    // Build a map of key variants to maximize match likelihood
+    const variantsMap = new Map();
+    for (const [key, val] of Object.entries(variables)) {
+      const snake = toSnake(key);
+      const camel = toCamel(key);
+      [key, snake, camel].forEach((k) => { if (k) variantsMap.set(k, val); });
+
+      // Also add synonyms from groups for this key
+      for (const group of KEY_GROUPS) {
+        const normalizedGroup = group.map(toSnake);
+        if (normalizedGroup.includes(snake)) {
+          for (const alias of group) {
+            const aliasSnake = toSnake(alias);
+            const aliasCamel = toCamel(alias);
+            [alias, aliasSnake, aliasCamel].forEach((k) => { if (k) variantsMap.set(k, val); });
+          }
+        }
+      }
+    }
+
+    // Replace {{ key }} allowing optional whitespace and case-insensitive key match
+    for (const [vKey, vVal] of variantsMap.entries()) {
+      const regex = new RegExp(`{{\\s*${esc(vKey)}\\s*}}`, 'gi');
+      result = result.replace(regex, String(vVal ?? ''));
+    }
+
     return result;
   }
 

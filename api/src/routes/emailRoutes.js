@@ -426,9 +426,10 @@ router.post('/webhook/sendgrid', async (req, res) => {
 router.post('/test', requireAdmin, async (req, res) => {
   try {
     const { email, subject, content } = req.body;
-    
+    // When DEV_BYPASS_ADMIN is true, req.user may be undefined; provide a fallback ObjectId for logging
+    const fallbackUserId = new mongoose.Types.ObjectId();
     const result = await emailService.sendEmail({
-      to: { userId: req.user._id, email },
+      to: { userId: (req.user && req.user._id) ? req.user._id : fallbackUserId, email },
       subject,
       htmlContent: content
     });
@@ -529,10 +530,27 @@ router.post('/automations/:id/test-send-all', requireAdmin, async (req, res) => 
     let sent = 0;
     const results = [];
     for (const u of users) {
+      const firstName = u.firstName || u.username || 'ColorCompeter';
+      const lastName = u.lastName || '';
       const perUserData = {
         ...commonData,
-        user_name: u.firstName || u.username || 'ColorCompeter',
-        userName: u.firstName || u.username || 'ColorCompeter',
+        // Common name variants
+        user_name: firstName,
+        userName: firstName,
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName}${lastName ? ' ' + lastName : ''}`,
+
+        // Metric synonyms: include both user_* and generic forms
+        submissions_count: commonData.user_submissions_count || commonData.submissions_count || '0',
+        wins_count: commonData.user_wins_count || commonData.wins_count || '0',
+        votes_count: commonData.user_total_votes || commonData.total_votes || '0',
+
+        // Also expose total_* synonyms
+        total_submissions_count: commonData.total_submissions || commonData.total_submissions_count || '0',
+        total_votes_count: commonData.total_votes || commonData.total_votes_count || '0',
+        total_participants_count: commonData.total_participants || commonData.total_participants_count || '0',
+
         unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe?userId=${u._id}`
       };
 
@@ -614,10 +632,15 @@ router.post('/automations/test-send-all', requireAdmin, async (req, res) => {
 
       let sent = 0;
       for (const u of users) {
+        const firstName = u.firstName || u.username || 'ColorCompeter';
+        const lastName = u.lastName || '';
         const perUserData = {
           ...commonData,
-          user_name: u.firstName || u.username || 'ColorCompeter',
-          userName: u.firstName || u.username || 'ColorCompeter',
+          user_name: firstName,
+          userName: firstName,
+          first_name: firstName,
+          last_name: lastName,
+          full_name: `${firstName}${lastName ? ' ' + lastName : ''}`,
           unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe?userId=${u._id}`
         };
         const subject = emailService.replaceTemplateVariables(a.emailTemplate.subject, perUserData);
@@ -628,7 +651,12 @@ router.post('/automations/test-send-all', requireAdmin, async (req, res) => {
           htmlContent,
           automationId: a._id
         });
-        if (result.success) sent += 1;
+        if (result.success) {
+          sent += 1;
+        } else {
+          // Log failure details to server console for debugging
+          console.warn('[automations/test-send-all] send failed', { email: u.email, error: result.error });
+        }
         await emailService.delay(75);
       }
       summary.push({ automationId: a._id, name: a.name, attempted: users.length, sent });
