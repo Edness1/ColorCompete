@@ -411,13 +411,24 @@ router.get('/analytics', requireAdmin, async (req, res) => {
 
 // =============== WEBHOOKS ===============
 
-// SendGrid webhook endpoint
-router.post('/webhook/sendgrid', async (req, res) => {
+// SendPulse webhook endpoint (primary)
+router.post('/webhook/sendpulse', async (req, res) => {
   try {
-    await emailService.handleWebhook(req.body);
+    await emailService.handleSendPulseWebhook(req.body);
     res.status(200).send('OK');
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('SendPulse webhook error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Backward compatible: legacy SendGrid webhook path now routed to the new handler
+router.post('/webhook/sendgrid', async (req, res) => {
+  try {
+    await emailService.handleSendPulseWebhook(req.body);
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Legacy webhook error:', error);
     res.status(500).json({ error: error.message });
   }
 });

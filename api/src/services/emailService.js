@@ -1,52 +1,64 @@
-let sgMail = null;
-try {
-  sgMail = require('@sendgrid/mail');
-} catch (e) {
-  console.warn('SendGrid library not available:', e?.message || e);
-}
 const axios = require('axios');
 const EmailLog = require('../models/EmailLog');
 const tremendousService = require('./tremendousService');
 
-// Initialize SendGrid if configured
-if (sgMail) {
-  if (process.env.SENDGRID_API_KEY) {
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  } else {
-    console.warn('SendGrid not configured: SENDGRID_API_KEY is missing');
-  }
-}
+// SendPulse API endpoints
+const SENDPULSE_TOKEN_URL = process.env.SENDPULSE_TOKEN_URL || 'https://api.sendpulse.com/oauth/access_token';
+const SENDPULSE_SEND_URL = process.env.SENDPULSE_SEND_URL || 'https://api.sendpulse.com/smtp/emails';
 
 class EmailService {
   constructor() {
     this.fromEmail = process.env.FROM_EMAIL || 'noreply@colorcompete.com';
     this.fromName = process.env.FROM_NAME || 'ColorCompete';
+    this._spToken = null;
+    this._spTokenExpiresAt = 0;
+  }
+
+  // Acquire and cache SendPulse OAuth token
+  async getSendPulseToken() {
+    const now = Date.now();
+    if (this._spToken && now < this._spTokenExpiresAt - 30000) { // 30s early refresh margin
+      return this._spToken;
+    }
+    const client_id = process.env.SENDPULSE_CLIENT_ID;
+    const client_secret = process.env.SENDPULSE_CLIENT_SECRET;
+    if (!client_id || !client_secret) {
+      throw new Error('Email service is not configured (SendPulse credentials missing)');
+    }
+    const { data } = await axios.post(SENDPULSE_TOKEN_URL, {
+      grant_type: 'client_credentials',
+      client_id,
+      client_secret
+    });
+    if (!data || !data.access_token) {
+      throw new Error('Failed to obtain SendPulse access token');
+    }
+    this._spToken = data.access_token;
+    const expiresInMs = (data.expires_in || 3600) * 1000;
+    this._spTokenExpiresAt = now + expiresInMs;
+    return this._spToken;
   }
 
   // Send individual email
   async sendEmail({ to, subject, htmlContent, textContent, campaignId = null, automationId = null }) {
     try {
-      if (!sgMail || !process.env.SENDGRID_API_KEY) {
-        return { success: false, error: 'Email service is not configured' };
-      }
-      const msg = {
-        to,
-        from: {
-          email: this.fromEmail,
-          name: this.fromName
-        },
-        subject,
-        html: htmlContent,
-        text: textContent || this.htmlToText(htmlContent),
-        trackingSettings: {
-          clickTracking: { enable: true },
-          openTracking: { enable: true }
+      const token = await this.getSendPulseToken();
+      const payload = {
+        email: {
+          subject,
+          from: { email: this.fromEmail, name: this.fromName },
+          to: [{ email: to.email }],
+          html: htmlContent,
+          text: textContent || this.htmlToText(htmlContent)
         }
       };
 
-      const response = await sgMail.send(msg);
-      
-      // Log the email
+      const response = await axios.post(SENDPULSE_SEND_URL, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const providerMessageId = response?.data?.id || response?.data?.email_id || null;
+
+      // Log the email (reuse sendGridMessageId field for provider id)
       const emailLog = new EmailLog({
         recipient: to.userId,
         recipientEmail: to.email,
@@ -54,12 +66,12 @@ class EmailService {
         automationId,
         subject,
         status: 'sent',
-        sendGridMessageId: response[0].headers['x-message-id']
+        sendGridMessageId: providerMessageId
       });
       
       await emailLog.save();
-      
-      return { success: true, messageId: response[0].headers['x-message-id'] };
+
+      return { success: true, messageId: providerMessageId };
     } catch (error) {
       console.error('Error sending email:', error);
       
@@ -231,48 +243,85 @@ class EmailService {
 
   // Handle SendGrid webhooks for tracking
   async handleWebhook(events) {
+    // Backward compat: if SendGrid events are still posted here, try to process them
     for (const event of events) {
       try {
         const emailLog = await EmailLog.findOne({ 
-          sendGridMessageId: event.sg_message_id 
+          sendGridMessageId: event.sg_message_id || event.smtp_id || event.id || event.transmission_id || null
         });
-        
-        if (emailLog) {
-          switch (event.event) {
-            case 'delivered':
-              emailLog.status = 'delivered';
-              emailLog.deliveredAt = new Date(event.timestamp * 1000);
-              break;
-            case 'open':
-              emailLog.status = 'opened';
-              emailLog.openedAt = new Date(event.timestamp * 1000);
-              emailLog.opens.push({
-                timestamp: new Date(event.timestamp * 1000),
-                userAgent: event.useragent,
-                ip: event.ip
-              });
-              break;
-            case 'click':
-              emailLog.status = 'clicked';
-              emailLog.clickedAt = new Date(event.timestamp * 1000);
-              emailLog.clicks.push({
-                timestamp: new Date(event.timestamp * 1000),
-                url: event.url,
-                userAgent: event.useragent,
-                ip: event.ip
-              });
-              break;
-            case 'bounce':
-              emailLog.status = 'bounced';
-              emailLog.bouncedAt = new Date(event.timestamp * 1000);
-              emailLog.failureReason = event.reason;
-              break;
-          }
-          
-          await emailLog.save();
+        if (!emailLog) continue;
+        switch (event.event) {
+          case 'delivered':
+            emailLog.status = 'delivered';
+            emailLog.deliveredAt = new Date((event.timestamp || Date.now()/1000) * 1000);
+            break;
+          case 'open':
+            emailLog.status = 'opened';
+            emailLog.openedAt = new Date((event.timestamp || Date.now()/1000) * 1000);
+            emailLog.opens.push({
+              timestamp: new Date((event.timestamp || Date.now()/1000) * 1000),
+              userAgent: event.useragent || event.user_agent,
+              ip: event.ip
+            });
+            break;
+          case 'click':
+            emailLog.status = 'clicked';
+            emailLog.clickedAt = new Date((event.timestamp || Date.now()/1000) * 1000);
+            emailLog.clicks.push({
+              timestamp: new Date((event.timestamp || Date.now()/1000) * 1000),
+              url: event.url,
+              userAgent: event.useragent || event.user_agent,
+              ip: event.ip
+            });
+            break;
+          case 'bounce':
+          case 'hard_bounce':
+          case 'soft_bounce':
+            emailLog.status = 'bounced';
+            emailLog.bouncedAt = new Date((event.timestamp || Date.now()/1000) * 1000);
+            emailLog.failureReason = event.reason || event.error;
+            break;
+          default:
+            break;
         }
+        await emailLog.save();
       } catch (error) {
         console.error('Error processing webhook event:', error);
+      }
+    }
+  }
+
+  // Handle SendPulse webhook payloads (array or single object)
+  async handleSendPulseWebhook(payload) {
+    const events = Array.isArray(payload) ? payload : [payload];
+    for (const event of events) {
+      try {
+        // SendPulse may provide id/smtp_id/transmission_id depending on event type
+        const idCandidate = event?.id || event?.smtp_id || event?.transmission_id || null;
+        if (!idCandidate) continue;
+        const emailLog = await EmailLog.findOne({ sendGridMessageId: idCandidate });
+        if (!emailLog) continue;
+        const type = (event.event || event.type || '').toLowerCase();
+        const ts = event.timestamp ? new Date(event.timestamp * 1000) : new Date();
+        if (type.includes('deliver')) {
+          emailLog.status = 'delivered';
+          emailLog.deliveredAt = ts;
+        } else if (type.includes('open')) {
+          emailLog.status = 'opened';
+          emailLog.openedAt = ts;
+          emailLog.opens.push({ timestamp: ts, userAgent: event.user_agent || event.useragent, ip: event.ip });
+        } else if (type.includes('click')) {
+          emailLog.status = 'clicked';
+          emailLog.clickedAt = ts;
+          emailLog.clicks.push({ timestamp: ts, url: event.url, userAgent: event.user_agent || event.useragent, ip: event.ip });
+        } else if (type.includes('bounce')) {
+          emailLog.status = 'bounced';
+          emailLog.bouncedAt = ts;
+          emailLog.failureReason = event.error || event.reason;
+        }
+        await emailLog.save();
+      } catch (err) {
+        console.error('SendPulse webhook processing error:', err);
       }
     }
   }
