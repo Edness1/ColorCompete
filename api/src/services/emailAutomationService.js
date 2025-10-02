@@ -33,7 +33,9 @@ class EmailAutomationService {
     
     // Cancel existing job if it exists
     if (this.scheduledJobs.has(jobKey)) {
-      this.scheduledJobs.get(jobKey).destroy();
+      const existing = this.scheduledJobs.get(jobKey);
+      if (existing && typeof existing.stop === 'function') existing.stop();
+      this.scheduledJobs.delete(jobKey);
     }
 
     // Validate schedule data
@@ -105,6 +107,10 @@ class EmailAutomationService {
           return;
         }
         break;
+      case 'admin_broadcast':
+        // Event-based only; no cron scheduling
+        console.log('Admin broadcast is event-based; no schedule created');
+        return;
       default:
         console.log(`Unknown or event-based automation type: ${automation.triggerType}`);
         return; // Event-based automations don't need cron jobs
@@ -319,7 +325,8 @@ class EmailAutomationService {
         // Remove from scheduled jobs if deactivated
         const jobKey = automationId.toString();
         if (this.scheduledJobs.has(jobKey)) {
-          this.scheduledJobs.get(jobKey).destroy();
+          const j = this.scheduledJobs.get(jobKey);
+          if (j && typeof j.stop === 'function') j.stop();
           this.scheduledJobs.delete(jobKey);
         }
       }
@@ -330,8 +337,8 @@ class EmailAutomationService {
 
   // Stop all automations
   stopAllAutomations() {
-    this.scheduledJobs.forEach((job, key) => {
-      job.destroy();
+    this.scheduledJobs.forEach((job) => {
+      if (job && typeof job.stop === 'function') job.stop();
     });
     this.scheduledJobs.clear();
     console.log('Stopped all email automations');

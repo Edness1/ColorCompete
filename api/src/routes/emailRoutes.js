@@ -7,6 +7,8 @@ const EmailLog = require('../models/EmailLog');
 const User = require('../models/User');
 const emailService = require('../services/emailService');
 const emailAutomationService = require('../services/emailAutomationService');
+const emailTemplateService = require('../services/emailTemplateService');
+const emailSvc = require('../services/emailService');
 
 // Middleware to check if user is admin
 const requireAdmin = async (req, res, next) => {
@@ -220,6 +222,123 @@ router.get('/automations', requireAdmin, async (req, res) => {
       .populate('createdBy', 'username email')
       .sort({ createdAt: -1 });
     res.json(automations);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Preview a template render (debug): body { templateName, variables }
+router.post('/preview', requireAdmin, async (req, res) => {
+  try {
+    const { templateName = 'admin_broadcast', variables = {} } = req.body || {};
+    const rendered = emailTemplateService.render(templateName, variables);
+    const html = rendered.html;
+    // Extract body inner HTML for the text preview to match sending path
+    const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const inner = m && m[1] ? m[1] : html;
+    const text = emailSvc.htmlToText(inner);
+    res.json({ subject: rendered.subject, html, text });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Seed default automations (contest_announcement, voting_results, weekly_summary) and admin_broadcast
+router.post('/automations/seed-defaults', requireAdmin, async (req, res) => {
+  try {
+    const {
+      time = process.env.DEFAULT_AUTOMATION_TIME || '09:00',
+      dayOfWeek = 1, // Monday by default for weekly_summary
+      timezone = process.env.DEFAULT_AUTOMATION_TZ || 'America/New_York'
+    } = req.body || {};
+
+    const upserts = [];
+
+    const ensureAutomation = async ({ name, triggerType, templateName }) => {
+      const tpl = emailTemplateService.render(templateName, {});
+      const update = {
+        name,
+        isActive: true,
+        triggerType,
+        emailTemplate: { subject: tpl.subject, htmlContent: tpl.html },
+        schedule: { time, timezone, ...(triggerType === 'weekly_summary' ? { dayOfWeek } : {}) }
+      };
+      const doc = await EmailAutomation.findOneAndUpdate(
+        { triggerType },
+        update,
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      // schedule or reschedule
+      emailAutomationService.scheduleAutomation(doc);
+      upserts.push({ triggerType, id: doc._id });
+    };
+
+    await ensureAutomation({ name: 'Contest Announcement', triggerType: 'contest_announcement', templateName: 'contest_announcement' });
+    await ensureAutomation({ name: 'Voting Results', triggerType: 'voting_results', templateName: 'voting_results' });
+    await ensureAutomation({ name: 'Weekly Summary', triggerType: 'weekly_summary', templateName: 'weekly_summary' });
+
+    // Admin broadcast is event-based, no schedule
+    const adminTpl = emailTemplateService.render('admin_broadcast', { subject: 'Admin Broadcast', bodyHtml: 'Hello {{userName}},<br/>This is a test broadcast.' });
+    const adminDoc = await EmailAutomation.findOneAndUpdate(
+      { triggerType: 'admin_broadcast' },
+      { name: 'Admin Broadcast', isActive: true, triggerType: 'admin_broadcast', emailTemplate: { subject: adminTpl.subject, htmlContent: adminTpl.html } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    res.json({ message: 'Defaults seeded', upserts: [...upserts, { triggerType: 'admin_broadcast', id: adminDoc._id }] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Admin broadcast send: body { subject, bodyHtml, audience?: 'all'|'subscribers'|'specific', userIds?: [] }
+router.post('/automations/admin-broadcast/send', requireAdmin, async (req, res) => {
+  try {
+    const { subject, bodyHtml, audience = 'all', userIds = [] } = req.body;
+    if (!subject || !bodyHtml) return res.status(400).json({ error: 'subject and bodyHtml are required' });
+
+    // Ensure automation exists for logging/template
+    const automation = await EmailAutomation.findOne({ triggerType: 'admin_broadcast' });
+    if (!automation) return res.status(400).json({ error: 'admin_broadcast automation not seeded' });
+
+    let usersQuery = { email: { $exists: true, $ne: '' } };
+    if (audience === 'specific' && Array.isArray(userIds) && userIds.length) {
+      usersQuery._id = { $in: userIds };
+    }
+    // future: add subscribers filter
+    const users = await User.find(usersQuery).select('_id email firstName lastName username');
+
+    let sent = 0;
+    const results = [];
+    for (const u of users) {
+      const userName = u.firstName || u.username || 'ColorCompeter';
+      // Normalize body to preserve line breaks in email clients
+      const normalizedBody = String(bodyHtml)
+        .replace(/\r\n/g, '\n')
+        // Split paragraphs on double newline and wrap with <p>
+        .split(/\n{2,}/)
+        .map(block => block.trim().length ? `<p style="margin:0 0 12px 0;">${block.replace(/\n/g, '<br/>')}</p>` : '')
+        .join('');
+      // render admin template with provided content
+      const tpl = emailTemplateService.render('admin_broadcast', {
+        subject,
+        bodyHtml: normalizedBody,
+        userName,
+        unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe?userId=${u._id}`
+      });
+
+      const result = await emailService.sendEmail({
+        to: { userId: u._id, email: u.email },
+        subject: subject,
+        htmlContent: tpl.html,
+        automationId: automation._id
+      });
+      results.push({ email: u.email, ...result });
+      if (result.success) sent += 1;
+      await emailService.delay(75);
+    }
+
+    res.json({ message: 'Broadcast attempted', attempted: users.length, sent, results });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

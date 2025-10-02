@@ -43,15 +43,36 @@ class EmailService {
   async sendEmail({ to, subject, htmlContent, textContent, campaignId = null, automationId = null }) {
     try {
       const token = await this.getSendPulseToken();
-      const payload = {
-        email: {
-          subject,
-          from: { email: this.fromEmail, name: this.fromName },
-          to: [{ email: to.email }],
-          html: htmlContent,
-          text: textContent || this.htmlToText(htmlContent)
-        }
+      const rawHtmlFull = htmlContent || '';
+      // Extract body content if present; some providers prefer body-inner HTML only
+      let rawHtml = rawHtmlFull;
+      try {
+        const m = rawHtmlFull.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        if (m && m[1]) rawHtml = m[1];
+      } catch(_) {}
+      const emailObj = {
+        subject,
+        from: { email: this.fromEmail, name: this.fromName },
+        to: [{ email: to.email }],
+        html: Buffer.from(rawHtml, 'utf8').toString('base64')
       };
+      if (textContent) {
+        emailObj.text = textContent;
+      } else {
+        // Provide a simple text fallback derived from HTML
+        emailObj.text = this.htmlToText(rawHtml);
+      }
+
+      // Debug: log sizes to help diagnose empty emails
+      try {
+        console.log('[emailService] sending email', {
+          to: to.email,
+          subject,
+          htmlLength: rawHtml.length,
+          textLength: (emailObj.text || '').length
+        });
+      } catch(_) {}
+      const payload = { email: emailObj };
 
       const response = await axios.post(SENDPULSE_SEND_URL, payload, {
         headers: { Authorization: `Bearer ${token}` }
@@ -206,6 +227,67 @@ class EmailService {
     ];
 
     let result = template;
+
+    // Helper: resolve a key from variables with simple snake/camel normalization and synonym groups
+    const resolveKey = (key) => {
+      const snake = toSnake(key);
+      // Try direct, snake, camel
+      if (variables[key] !== undefined) return variables[key];
+      const camel = toCamel(key);
+      if (variables[snake] !== undefined) return variables[snake];
+      if (variables[camel] !== undefined) return variables[camel];
+      // Try group synonyms
+      for (const group of KEY_GROUPS) {
+        const g = group.map(toSnake);
+        if (g.includes(snake)) {
+          for (const alias of group) {
+            const aSnake = toSnake(alias);
+            const aCamel = toCamel(alias);
+            if (variables[alias] !== undefined) return variables[alias];
+            if (variables[aSnake] !== undefined) return variables[aSnake];
+            if (variables[aCamel] !== undefined) return variables[aCamel];
+          }
+        }
+      }
+      return undefined;
+    };
+
+    // First handle array/boolean sections: {{#name}}...{{/name}} and inverted {{^name}}...{{/name}}
+    const sectionRegex = /{{#(\w+)}}([\s\S]*?){{\/\1}}/g;
+    const invertedRegex = /{{\^(\w+)}}([\s\S]*?){{\/\1}}/g;
+
+    // Expand positive sections
+    result = result.replace(sectionRegex, (match, key, content) => {
+      const val = resolveKey(key);
+      if (Array.isArray(val)) {
+        return val.map((item) => {
+          // Render content against each item (shallow replace of {{prop}})
+          let itemContent = content;
+          Object.entries(item || {}).forEach(([k, v]) => {
+            const r = new RegExp(`{{\\s*${esc(k)}\\s*}}`, 'g');
+            itemContent = itemContent.replace(r, String(v ?? ''));
+          });
+          return itemContent;
+        }).join('');
+      }
+      if (val) {
+        // truthy: keep content with variable replacements from outer variables
+        let inner = content;
+        Object.entries(variables).forEach(([k, v]) => {
+          const r = new RegExp(`{{\\s*${esc(k)}\\s*}}`, 'gi');
+          inner = inner.replace(r, String(v ?? ''));
+        });
+        return inner;
+      }
+      return '';
+    });
+
+    // Expand inverted sections
+    result = result.replace(invertedRegex, (match, key, content) => {
+      const val = resolveKey(key);
+      const isEmpty = val === undefined || val === null || val === false || (Array.isArray(val) && val.length === 0);
+      return isEmpty ? content : '';
+    });
 
     // Build a map of key variants to maximize match likelihood
     const variantsMap = new Map();

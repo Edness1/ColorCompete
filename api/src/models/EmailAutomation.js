@@ -6,7 +6,7 @@ const EmailAutomationSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: false },
   triggerType: { 
     type: String, 
-    enum: ['daily_winner', 'monthly_winner', 'winner_reward', 'welcome', 'subscription_expired', 'contest_announcement', 'voting_results', 'comment_feedback', 'weekly_summary', 'monthly_drawing_lite', 'monthly_drawing_pro', 'monthly_drawing_champ', 'monthly_drawing_lite_participant', 'monthly_drawing_pro_participant', 'monthly_drawing_champ_participant'], 
+    enum: ['daily_winner', 'monthly_winner', 'winner_reward', 'welcome', 'subscription_expired', 'contest_announcement', 'voting_results', 'comment_feedback', 'weekly_summary', 'monthly_drawing_lite', 'monthly_drawing_pro', 'monthly_drawing_champ', 'monthly_drawing_lite_participant', 'monthly_drawing_pro_participant', 'monthly_drawing_champ_participant', 'admin_broadcast'], 
     required: true 
   },
   emailTemplate: {
