@@ -624,16 +624,16 @@ router.post('/automations/:id/test-send-all', requireAdmin, async (req, res) => 
       challenge_description: 'This is a test description for the latest ColorCompete contest.',
       end_date: new Date(Date.now() + 7 * 24 * 3600 * 1000).toLocaleDateString(),
       prize_amount: '$25 Gift Card',
-      contest_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest`,
+      contest_url: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}`,
       winner_name: 'Alex Artist',
-      winning_submission: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/winning-submission.png`,
+      winning_submission: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}/images/winning-submission.png`,
       total_votes: '123',
-      results_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest/results`,
+      results_url: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}/results`,
       user_name: 'ColorCompeter',
       user_submissions_count: '3',
       user_wins_count: '1',
       user_total_votes: '42',
-      dashboard_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`,
+      dashboard_url: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}/`,
       active_contests: '4',
       new_members: '25',
       total_submissions: '87',
@@ -644,7 +644,7 @@ router.post('/automations/:id/test-send-all', requireAdmin, async (req, res) => 
       contestPrize: '$25 Gift Card',
       contestDeadline: new Date(Date.now() + 7 * 24 * 3600 * 1000).toLocaleDateString(),
       votingPeriod: `${new Date().toLocaleDateString()} - ${new Date(Date.now() + 2 * 24 * 3600 * 1000).toLocaleDateString()}`,
-      contestUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest`,
+      contestUrl: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}`,
       totalSubmissions: '87',
       totalParticipants: '54',
       totalVotes: '123',
@@ -652,9 +652,9 @@ router.post('/automations/:id/test-send-all', requireAdmin, async (req, res) => 
         { rank: '1st', winnerName: 'Alex Artist', prize: '$25', voteCount: 45, submissionImage: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/win1.png` },
         { rank: '2nd', winnerName: 'Pat Painter', prize: '$10', voteCount: 30, submissionImage: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/win2.png` }
       ],
-      dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`,
-      unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe`,
-      websiteUrl: process.env.FRONTEND_URL || 'http://localhost:5173'
+      dashboardUrl: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}`,
+      unsubscribeUrl: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}/unsubscribe`,
+      websiteUrl: process.env.FRONTEND_URL || 'https://colorcompete.com'
     };
 
     let sent = 0;
@@ -681,7 +681,7 @@ router.post('/automations/:id/test-send-all', requireAdmin, async (req, res) => 
         total_votes_count: commonData.total_votes || commonData.total_votes_count || '0',
         total_participants_count: commonData.total_participants || commonData.total_participants_count || '0',
 
-        unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe?userId=${u._id}`
+        unsubscribeUrl: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}/unsubscribe?userId=${u._id}`
       };
 
       const subject = emailService.replaceTemplateVariables(automation.emailTemplate.subject, perUserData);
@@ -728,16 +728,16 @@ router.post('/automations/test-send-all', requireAdmin, async (req, res) => {
         challenge_description: 'This is a test description for the latest ColorCompete contest.',
         end_date: new Date(Date.now() + 7 * 24 * 3600 * 1000).toLocaleDateString(),
         prize_amount: '$25 Gift Card',
-        contest_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest`,
+        contest_url: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}`,
         winner_name: 'Alex Artist',
-        winning_submission: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/winning.png`,
+        winning_submission: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}/images/winning.png`,
         total_votes: '123',
-        results_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest/results`,
+        results_url: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}/results`,
         user_name: 'ColorCompeter',
         user_submissions_count: '3',
         user_wins_count: '1',
         user_total_votes: '42',
-        dashboard_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`,
+        dashboard_url: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}`,
         active_contests: '4',
         new_members: '25',
         total_submissions: '87',
@@ -747,7 +747,7 @@ router.post('/automations/test-send-all', requireAdmin, async (req, res) => {
         contestPrize: '$25 Gift Card',
         contestDeadline: new Date(Date.now() + 7 * 24 * 3600 * 1000).toLocaleDateString(),
         votingPeriod: `${new Date().toLocaleDateString()} - ${new Date(Date.now() + 2 * 24 * 3600 * 1000).toLocaleDateString()}`,
-        contestUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/contests/test-contest`,
+        contestUrl: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}`,
         totalSubmissions: '87',
         totalParticipants: '54',
         totalVotes: '123',
@@ -755,9 +755,9 @@ router.post('/automations/test-send-all', requireAdmin, async (req, res) => {
           { rank: '1st', winnerName: 'Alex Artist', prize: '$25', voteCount: 45, submissionImage: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/win1.png` },
           { rank: '2nd', winnerName: 'Pat Painter', prize: '$10', voteCount: 30, submissionImage: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/images/win2.png` }
         ],
-        dashboardUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`,
-        unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe`,
-        websiteUrl: process.env.FRONTEND_URL || 'http://localhost:5173'
+        dashboardUrl: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}`,
+        unsubscribeUrl: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}/unsubscribe`,
+        websiteUrl: process.env.FRONTEND_URL || 'https://colorcompete.com'
       };
 
       let sent = 0;
@@ -771,7 +771,7 @@ router.post('/automations/test-send-all', requireAdmin, async (req, res) => {
           first_name: firstName,
           last_name: lastName,
           full_name: `${firstName}${lastName ? ' ' + lastName : ''}`,
-          unsubscribeUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/unsubscribe?userId=${u._id}`
+          unsubscribeUrl: `${process.env.FRONTEND_URL || 'https://colorcompete.com'}/unsubscribe?userId=${u._id}`
         };
         const subject = emailService.replaceTemplateVariables(a.emailTemplate.subject, perUserData);
         const htmlContent = emailService.replaceTemplateVariables(a.emailTemplate.htmlContent, perUserData);
@@ -800,3 +800,61 @@ router.post('/automations/test-send-all', requireAdmin, async (req, res) => {
 });
 
 module.exports = router;
+ 
+// Admin-only: trigger a contest announcement for a specific challenge now
+router.post('/automations/contest-announcement/execute', requireAdmin, async (req, res) => {
+  try {
+    const { challengeId } = req.body;
+    if (!challengeId) return res.status(400).json({ error: 'challengeId required' });
+    const challenge = await require('../models/Challenge').findById(challengeId);
+    if (!challenge) return res.status(404).json({ error: 'Challenge not found' });
+    await emailAutomationService.sendContestAnnouncement({
+      _id: challenge._id,
+      title: challenge.title,
+      description: challenge.description || '',
+      prize: undefined,
+      deadline: challenge.endDate,
+      votingPeriod: undefined
+    });
+    res.json({ message: 'Contest announcement triggered', challengeId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Admin-only: trigger a voting results send for a specific challenge now
+router.post('/automations/voting-results/execute', requireAdmin, async (req, res) => {
+  try {
+    const { challengeId } = req.body;
+    if (!challengeId) return res.status(400).json({ error: 'challengeId required' });
+    const Challenge = require('../models/Challenge');
+    const Submission = require('../models/Submission');
+    const challenge = await Challenge.findById(challengeId).populate('winner');
+    if (!challenge) return res.status(404).json({ error: 'Challenge not found' });
+    if (!challenge.winner) return res.status(400).json({ error: 'Challenge has no winner set' });
+
+    const subs = await Submission.find({ challenge_id: challenge._id });
+    const participantIds = [...new Set(subs.map(s => s.user_id).filter(Boolean))];
+    const totalSubmissions = subs.length;
+    const totalVotes = subs.reduce((acc, s) => acc + (Array.isArray(s.votes) ? s.votes.length : 0), 0);
+    const winnerSubmission = subs.find(s => s.user_id && s.user_id.toString() === challenge.winner._id.toString());
+    const winners = [{
+      user: challenge.winner,
+      prize: undefined,
+      votes: winnerSubmission && Array.isArray(winnerSubmission.votes) ? winnerSubmission.votes.length : 0,
+      imageUrl: (winnerSubmission && (winnerSubmission.imageUrl || winnerSubmission.file_path)) || undefined
+    }];
+
+    await emailAutomationService.sendVotingResults({
+      _id: challenge._id,
+      title: challenge.title,
+      totalSubmissions,
+      totalVotes,
+      participantIds
+    }, winners);
+
+    res.json({ message: 'Voting results triggered', challengeId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});

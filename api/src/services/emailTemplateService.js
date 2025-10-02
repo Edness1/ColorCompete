@@ -117,7 +117,7 @@ class EmailTemplateService {
                         </tr>
                       </table>
                       <p style="text-align:center;margin:22px 0;">
-                        <a href="{{dashboard_url}}" style="background:#22c55e;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;display:inline-block;font-size:14px;">Go to Dashboard</a>
+                        <a href="{{dashboard_url}}" style="background:#22c55e;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;display:inline-block;font-size:14px;">ColorCompete</a>
                       </p>
                     </td>
                   </tr>

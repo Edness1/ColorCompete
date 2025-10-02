@@ -11,6 +11,22 @@ exports.createChallenge = async (req, res) => {
   try {
     const challenge = new Challenge(req.body);
     await challenge.save();
+    // Fire contest announcement when newly created with active status
+    try {
+      if (challenge.status === 'active') {
+        await emailAutomationService.sendContestAnnouncement({
+          _id: challenge._id,
+          title: challenge.title,
+          description: challenge.description || '',
+          prize: undefined,
+          deadline: challenge.endDate,
+          votingPeriod: undefined
+        });
+        console.log(`Contest announcement triggered for new challenge: ${challenge.title}`);
+      }
+    } catch (announceErr) {
+      console.error('Error triggering contest announcement on create:', announceErr);
+    }
     res.status(201).json(challenge);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -77,8 +93,8 @@ exports.updateChallenge = async (req, res) => {
       try {
         // Find the winning submission
         const winningSubmission = await Submission.findOne({
-          challenge: challenge._id,
-          user: challenge.winner._id
+          challenge_id: challenge._id,
+          user_id: challenge.winner._id
         });
         
         if (winningSubmission) {
@@ -86,7 +102,7 @@ exports.updateChallenge = async (req, res) => {
           await emailAutomationService.sendWinnerReward(
             challenge.winner._id,
             challenge.title,
-            winningSubmission.imageUrl
+            winningSubmission.imageUrl || winningSubmission.file_path
           );
           
           console.log(`Winner reward triggered for challenge: ${challenge.title}, winner: ${challenge.winner.username}`);
@@ -104,7 +120,7 @@ exports.updateChallenge = async (req, res) => {
           
           // Also check badges for all participants in this contest
           try {
-            const allSubmissions = await Submission.find({ challenge: challenge._id });
+            const allSubmissions = await Submission.find({ challenge_id: challenge._id });
             const participantIds = [...new Set(allSubmissions.map(s => s.user_id))];
             
             for (const participantId of participantIds) {
@@ -122,6 +138,37 @@ exports.updateChallenge = async (req, res) => {
       } catch (emailError) {
         console.error('Error triggering winner reward email:', emailError);
         // Don't fail the challenge update if email fails
+      }
+
+      // Additionally, send voting results emails to participants
+      try {
+        const subs = await Submission.find({ challenge_id: challenge._id });
+        const participantIds = [...new Set(subs.map(s => s.user_id).filter(Boolean))];
+        const totalSubmissions = subs.length;
+        const totalVotes = subs.reduce((acc, s) => acc + (Array.isArray(s.votes) ? s.votes.length : 0), 0);
+        const winners = [{
+          user: challenge.winner,
+          prize: undefined,
+          votes: (() => {
+            const w = subs.find(s => s.user_id && challenge.winner && s.user_id.toString() === challenge.winner._id.toString());
+            return w && Array.isArray(w.votes) ? w.votes.length : 0;
+          })(),
+          imageUrl: (() => {
+            const w = subs.find(s => s.user_id && challenge.winner && s.user_id.toString() === challenge.winner._id.toString());
+            return (w && (w.imageUrl || w.file_path)) || undefined;
+          })()
+        }];
+
+        await emailAutomationService.sendVotingResults({
+          _id: challenge._id,
+          title: challenge.title,
+          totalSubmissions,
+          totalVotes,
+          participantIds
+        }, winners);
+        console.log(`Voting results emails triggered for challenge: ${challenge.title}`);
+      } catch (vrErr) {
+        console.error('Error triggering voting results emails:', vrErr);
       }
     }
     

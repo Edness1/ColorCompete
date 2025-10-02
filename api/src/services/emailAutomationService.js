@@ -529,25 +529,26 @@ class EmailAutomationService {
   // Send contest announcement email (called by cron scheduler)
   async sendContestAnnouncementEmail(automation) {
     try {
-      // This method would be triggered by cron scheduler to announce new contests
-      // For now, just log since contests are announced when created via the other method
       console.log('Contest announcement automation triggered - checking for new contests to announce');
-      
-      // Get contests created in the last day
+
+      // Consider contests made active/created in the last day
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const recentContests = await Challenge.find({
-        createdAt: { $gte: yesterday },
-        isActive: true
+        status: 'active',
+        $or: [
+          { createdAt: { $gte: yesterday } },
+          { startDate: { $gte: yesterday } }
+        ]
       });
 
       for (const contest of recentContests) {
         await this.sendContestAnnouncement({
           _id: contest._id,
           title: contest.title,
-          description: contest.description,
-          prize: contest.prize,
+          description: contest.description || '',
+          prize: undefined, // not tracked; template will default
           deadline: contest.endDate,
-          votingPeriod: contest.votingEndDate
+          votingPeriod: undefined
         });
       }
       
@@ -560,18 +561,44 @@ class EmailAutomationService {
   async sendVotingResultsEmail(automation) {
     try {
       console.log('Voting results automation triggered - checking for contests with results to announce');
-      
-      // Get contests that ended in the last day and have winners
+      // Find recently completed contests (winner set) in the last day
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const contestsWithResults = await Challenge.find({
-        votingEndDate: { $gte: yesterday, $lte: new Date() },
-        isActive: false, // Contest has ended
-        winners: { $exists: true, $ne: [] }
-      }).populate('winners.user');
+      const completed = await Challenge.find({
+        status: 'completed',
+        winner: { $exists: true, $ne: null },
+        updatedAt: { $gte: yesterday }
+      }).populate('winner');
 
-      for (const contest of contestsWithResults) {
-        if (contest.winners && contest.winners.length > 0) {
-          await this.sendVotingResults(contest, contest.winners);
+      for (const contest of completed) {
+        // Collect participants from submissions (Submission schema uses challenge_id, user_id, votes: [userIds])
+        const subs = await Submission.find({ challenge_id: contest._id });
+        const participantIds = [...new Set(subs.map(s => s.user_id).filter(Boolean))];
+        const totalSubmissions = subs.length;
+        const totalVotes = subs.reduce((acc, s) => acc + ((Array.isArray(s.votes) ? s.votes.length : 0)), 0);
+
+        // Winner details
+        const winnerUser = contest.winner; // populated
+        let winnerSubmission = null;
+        if (winnerUser) {
+          winnerSubmission = await Submission.findOne({ challenge_id: contest._id, user_id: winnerUser._id });
+        }
+        const winners = winnerUser ? [{
+          user: winnerUser,
+          prize: undefined,
+          votes: (winnerSubmission && Array.isArray(winnerSubmission.votes) ? winnerSubmission.votes.length : 0),
+          imageUrl: (winnerSubmission && (winnerSubmission.imageUrl || winnerSubmission.file_path)) || undefined
+        }] : [];
+
+        const contestData = {
+          _id: contest._id,
+          title: contest.title,
+          totalSubmissions,
+          totalVotes,
+          participantIds
+        };
+
+        if (winners.length > 0) {
+          await this.sendVotingResults(contestData, winners);
         }
       }
       
