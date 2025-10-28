@@ -446,6 +446,10 @@ class EmailAutomationService {
         return;
       }
 
+      console.log(
+        `Sending voting results for contest ${contestData._id}: notifying ${participants.length} participants with ${winners.length} winners.`,
+      );
+
       const templateData = {
         contestTitle: contestData.title,
         winners: winners.map((winner, index) => ({
@@ -636,11 +640,26 @@ class EmailAutomationService {
   // Run monthly drawing for specified tier
   async runMonthlyDrawing(automation, tier) {
     try {
-      const now = new Date();
+      const timezone = automation.schedule?.timezone || 'America/New_York';
+      const now = new Date(
+        new Date().toLocaleString('en-US', { timeZone: timezone }),
+      );
       const currentMonth = now.getMonth() + 1; // JavaScript months are 0-indexed
       const currentYear = now.getFullYear();
+      const configuredDay = automation.monthlyDrawingSettings?.drawingDate || 1;
+      const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+      const effectiveDay = Math.min(configuredDay, daysInMonth);
 
-      console.log(`Running monthly drawing for ${tier} tier - ${currentMonth}/${currentYear}`);
+      if (now.getDate() !== effectiveDay) {
+        console.log(
+          `Skipping monthly drawing for ${tier} tier on ${now.toISOString()} (timezone ${timezone}). Waiting for day ${effectiveDay} of the month.`,
+        );
+        return;
+      }
+
+      console.log(
+        `Running monthly drawing for ${tier} tier - ${currentMonth}/${currentYear} (timezone ${timezone}, configured day ${configuredDay}, effective day ${effectiveDay})`,
+      );
 
       // Check if drawing already exists for this month/year/tier
       const existingDrawing = await MonthlyDrawing.findOne({
@@ -701,6 +720,10 @@ class EmailAutomationService {
         console.log(`No participants found for ${tier} tier monthly drawing`);
         return;
       }
+
+      console.log(
+        `Monthly drawing participant pool for ${tier}: ${participants.length} eligible users (from ${activeSubscriptions.length} subscriptions)`,
+      );
 
       // Select random winner
       const randomIndex = Math.floor(Math.random() * participants.length);
