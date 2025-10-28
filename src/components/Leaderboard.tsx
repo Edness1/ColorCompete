@@ -443,26 +443,6 @@ const WinnerCard = ({
           </div>
         </div>
         <div className="flex justify-between mt-2">
-          <div className="flex gap-2">
-            {entry.contestType && (
-              <Badge variant="outline" className="text-xs">
-                {entry.contestType === "traditional"
-                  ? "Traditional"
-                  : "Digital"}
-              </Badge>
-            )}
-            {entry.ageGroup && (
-              <Badge variant="secondary" className="text-xs">
-                {entry.ageGroup === "child"
-                  ? "Child"
-                  : entry.ageGroup === "teen"
-                    ? "Teen"
-                    : entry.ageGroup === "adult"
-                      ? "Adult"
-                      : "Senior"}
-              </Badge>
-            )}
-          </div>
           {entry.date && (
             <span className="text-xs text-muted-foreground">{formatDate(entry.date)}</span>
           )}

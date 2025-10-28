@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Upload,
@@ -86,6 +86,8 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
 
   const [imageUrl, setImageUrl] = useState<string>("");
   const [preview, setPreview] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -94,6 +96,8 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
   const [displayRemaining, setDisplayRemaining] = useState<number | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const previewProgressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Progress helpers for indeterminate-like behavior
   const startProgress = () => {
@@ -121,6 +125,56 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       setUploadProgress(null);
     }
   };
+
+  const clearPreviewTimers = useCallback(() => {
+    if (previewProgressRef.current) {
+      clearInterval(previewProgressRef.current);
+      previewProgressRef.current = null;
+    }
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+      previewTimeoutRef.current = null;
+    }
+  }, []);
+
+  const startPreviewProgress = useCallback(() => {
+    clearPreviewTimers();
+    setIsPreviewLoading(true);
+    setPreviewProgress(5);
+    previewProgressRef.current = setInterval(() => {
+      setPreviewProgress((prev) => {
+        if (prev === null) return 5;
+        const next = prev + Math.random() * 10 + 5;
+        return Math.min(next, 90);
+      });
+    }, 350);
+  }, [clearPreviewTimers]);
+
+  const finishPreviewProgress = useCallback(() => {
+    clearPreviewTimers();
+    setPreviewProgress(100);
+    previewTimeoutRef.current = setTimeout(() => {
+      setPreviewProgress(null);
+      setIsPreviewLoading(false);
+    }, 320);
+  }, [clearPreviewTimers]);
+
+  const failPreviewProgress = useCallback(() => {
+    clearPreviewTimers();
+    setPreviewProgress(null);
+    setIsPreviewLoading(false);
+  }, [clearPreviewTimers]);
+
+  const handlePreviewLoad = useCallback(() => {
+    finishPreviewProgress();
+  }, [finishPreviewProgress]);
+
+  const handlePreviewError = useCallback(() => {
+    failPreviewProgress();
+    setPreview(null);
+    setImageUrl("");
+    setError("Failed to load image preview. Please try again.");
+  }, [failPreviewProgress]);
 
   // Check for payment success from URL params
   useEffect(() => {
@@ -169,6 +223,12 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       verifySession();
     }
   }, [location.search]);
+
+  useEffect(() => {
+    return () => {
+      clearPreviewTimers();
+    };
+  }, [clearPreviewTimers]);
   const [ageGroup, setAgeGroup] = useState<string>("adult");
   const [contestType, setContestType] = useState<string>(
     initialContestType || "traditional",
@@ -177,10 +237,12 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
   useEffect(() => {
     if (imageUrl) {
       setPreview(imageUrl);
+      startPreviewProgress();
     } else {
       setPreview(null);
+      failPreviewProgress();
     }
-  }, [imageUrl]);
+  }, [imageUrl, startPreviewProgress, failPreviewProgress]);
 
   const handleSubmit = async () => {
     console.log("handleSubmit called");
@@ -313,6 +375,7 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
 
   const resetForm = () => {
     setImageUrl("");
+    failPreviewProgress();
     setPreview(null);
     setError(null);
     setShowConfirmation(false);
@@ -351,7 +414,6 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
       let enhancedUrl = data.secure_url;
       enhancedUrl = enhancedUrl.replace('/upload/', '/upload/e_enhance/');
       setImageUrl(enhancedUrl);
-      setPreview(enhancedUrl);
     } catch (err) {
       setError("Failed to upload image. Please try again.");
     }
@@ -511,7 +573,15 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
                     src={preview}
                     alt="Preview"
                     className="w-full h-[300px] object-contain"
+                    onLoad={handlePreviewLoad}
+                    onError={handlePreviewError}
                   />
+                  {(isPreviewLoading || previewProgress !== null) && (
+                    <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 pointer-events-none">
+                      <Progress value={previewProgress ?? 0} className="w-3/4 h-2" />
+                      <p className="text-xs text-muted-foreground">Loading preview…</p>
+                    </div>
+                  )}
                   <Button
                     variant="destructive"
                     size="icon"
@@ -570,10 +640,6 @@ const SubmissionForm: React.FC<SubmissionFormProps> = ({
             <div className="bg-muted/50 p-3 rounded-md">
               <p className="text-sm font-medium">Submission Details:</p>
               <ul className="text-sm mt-1 space-y-1">
-                <li>
-                  <span className="text-muted-foreground">Age Group:</span>{" "}
-                  {ageGroup.charAt(0).toUpperCase() + ageGroup.slice(1)}
-                </li>
                 <li>
                   <span className="text-muted-foreground">Submission:</span>{" "}
                   {remainingSubmissions > 0 ? (

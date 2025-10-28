@@ -12,6 +12,7 @@ import {
 } from "../ui/card";
 import { useToast } from "../ui/use-toast";
 import { ArrowLeft, Mail } from "lucide-react";
+import { API_URL } from "@/lib/utils";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -25,7 +26,7 @@ export default function ForgotPassword() {
 
     try {
       // Call REST API password reset endpoint (placeholder)
-      const res = await fetch(`/api/users/forgot-password`, {
+  const res = await fetch(`${API_URL}/api/users/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, redirectUrl: `${window.location.origin}/reset-password` }),

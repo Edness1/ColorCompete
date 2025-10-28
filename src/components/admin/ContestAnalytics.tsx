@@ -66,26 +66,31 @@ export default function ContestAnalytics() {
       const analytics: ContestAnalytics[] = await analyticsRes.json();
 
       // Combine the data
-      const combined = contests.map((contest) => {
-        const contestId = contest.id || contest._id as string;
-        const contestAnalytics =
-          analytics.find((a) => a.contest_id === contestId) || {
-            id: "",
-            contest_id: contestId,
-            views: 0,
-            downloads: 0,
-            submissions: 0,
-            votes: 0,
-            created_at: "",
-            updated_at: "",
-          };
+      const combined = contests
+        .map((contest) => {
+          const contestId = contest.id || (contest._id as string);
+          const contestAnalytics =
+            analytics.find((a) => a.contest_id === contestId) || {
+              id: "",
+              contest_id: contestId,
+              views: 0,
+              downloads: 0,
+              submissions: 0,
+              votes: 0,
+              created_at: "",
+              updated_at: "",
+            };
 
-        return {
-          ...contest,
-          id: contestId,
-          analytics: contestAnalytics,
-        };
-      });
+          return {
+            ...contest,
+            id: contestId,
+            analytics: contestAnalytics,
+          };
+        })
+        .sort(
+          (a, b) =>
+            getContestTimestamp(b) - getContestTimestamp(a),
+        );
 
       setContestsWithAnalytics(combined);
     } catch (error) {
@@ -141,6 +146,27 @@ export default function ContestAnalytics() {
       default:
         return "bg-gray-500";
     }
+  };
+
+  const getContestTimestamp = (contest: ContestWithAnalytics) => {
+    const candidates = [
+      contest.analytics.updated_at,
+      contest.analytics.created_at,
+      contest.endDate,
+      contest.end_date,
+      contest.startDate,
+      contest.start_date,
+    ];
+
+    for (const value of candidates) {
+      if (!value) continue;
+      const time = new Date(value).getTime();
+      if (!Number.isNaN(time)) {
+        return time;
+      }
+    }
+
+    return 0;
   };
 
   return (

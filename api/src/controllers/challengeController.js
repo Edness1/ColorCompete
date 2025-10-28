@@ -6,6 +6,41 @@ const BadgeService = require('../services/badgeService');
 // Contest Analytics Model (create this model if it doesn't exist)
 const ContestAnalytics = require('../models/ContestAnalytics');
 
+async function synchronizeChallengeStatuses() {
+  const now = new Date();
+
+  const scheduledToActivate = await Challenge.find({
+    status: 'scheduled',
+    startDate: { $lte: now },
+  });
+
+  await Promise.all(
+    scheduledToActivate.map(async (challenge) => {
+      challenge.status = 'active';
+      await challenge.save();
+
+      try {
+        await emailAutomationService.sendContestAnnouncement({
+          _id: challenge._id,
+          title: challenge.title,
+          description: challenge.description || '',
+          prize: undefined,
+          deadline: challenge.endDate,
+          votingPeriod: undefined,
+        });
+        console.log(
+          `Contest announcement triggered for auto-activated challenge: ${challenge.title}`,
+        );
+      } catch (announceErr) {
+        console.error(
+          'Error triggering contest announcement for auto-activation:',
+          announceErr,
+        );
+      }
+    }),
+  );
+}
+
 // Create a new challenge
 exports.createChallenge = async (req, res) => {
   try {
@@ -36,7 +71,8 @@ exports.createChallenge = async (req, res) => {
 // Get all challenges
 exports.getAllChallenges = async (req, res) => {
   try {
-  const challenges = await Challenge.find();
+    await synchronizeChallengeStatuses();
+    const challenges = await Challenge.find();
     res.status(200).json(challenges);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -46,6 +82,7 @@ exports.getAllChallenges = async (req, res) => {
 // Explicit active challenge endpoint: returns the single most recent active challenge
 exports.getCurrentActiveChallenge = async (req, res) => {
   try {
+    await synchronizeChallengeStatuses();
     const now = new Date();
     // Active defined by status === 'active' and current time within window if dates exist
     const active = await Challenge.find({ status: 'active' }).sort({ startDate: -1 }).lean();
@@ -67,6 +104,7 @@ exports.getCurrentActiveChallenge = async (req, res) => {
 // Get a challenge by ID
 exports.getChallengeById = async (req, res) => {
   try {
+    await synchronizeChallengeStatuses();
     const challenge = await Challenge.findById(req.params.id);
     if (!challenge) {
       return res.status(404).json({ message: 'Challenge not found' });
@@ -171,7 +209,7 @@ exports.updateChallenge = async (req, res) => {
         console.error('Error triggering voting results emails:', vrErr);
       }
     }
-    
+    await synchronizeChallengeStatuses();
     res.status(200).json(challenge);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -194,6 +232,7 @@ exports.deleteChallenge = async (req, res) => {
 // Get the currently active contest (challenge) by date and status
 exports.getActiveChallenge = async (req, res) => {
   try {
+    await synchronizeChallengeStatuses();
     const now = req.query.now ? new Date(req.query.now) : new Date();
     const challenge = await Challenge.find({
       status: "active",

@@ -1,4 +1,5 @@
 const cron = require('node-cron');
+const mongoose = require('mongoose');
 const EmailAutomation = require('../models/EmailAutomation');
 const User = require('../models/User');
 const Subscription = require('../models/Subscription');
@@ -50,6 +51,13 @@ class EmailAutomationService {
       case 'contest_announcement':
         // Run daily at specified time
         if (!automation.schedule.time) {
+      const timezone = automation.schedule?.timezone || 'America/New_York';
+      const now = new Date(
+        new Date().toLocaleString('en-US', { timeZone: timezone })
+      );
+      const configuredDay = automation.monthlyDrawingSettings?.drawingDate || 1;
+      const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+      const effectiveDay = Math.min(configuredDay, daysInMonth);
           console.error(`Missing schedule time for contest_announcement automation: ${automation.name}`);
           return;
         }
@@ -93,15 +101,14 @@ class EmailAutomationService {
       case 'monthly_drawing_lite':
       case 'monthly_drawing_pro':
       case 'monthly_drawing_champ':
-        // Run monthly on specified day at specified time
+        // Evaluate monthly drawings daily at the configured time; the handler will ensure it only runs on the intended day
         if (!automation.schedule.time || !automation.monthlyDrawingSettings?.drawingDate) {
           console.error(`Missing schedule time or drawing date for monthly drawing automation: ${automation.name}`);
           return;
         }
         try {
           const [mHour, mMinute] = automation.schedule.time.split(':');
-          const dayOfMonth = automation.monthlyDrawingSettings.drawingDate;
-          cronExpression = `${mMinute} ${mHour} ${dayOfMonth} * *`;
+          cronExpression = `${mMinute} ${mHour} * * *`;
         } catch (error) {
           console.error(`Invalid time format for automation ${automation.name}:`, automation.schedule.time);
           return;
@@ -415,10 +422,29 @@ class EmailAutomationService {
         return;
       }
 
+      const participantObjectIds = [...new Set((contestData.participantIds || []).map((id) => {
+        if (!id) return null;
+        try {
+          return new mongoose.Types.ObjectId(id);
+        } catch (err) {
+          return null;
+        }
+      }).filter(Boolean))];
+
+      if (participantObjectIds.length === 0) {
+        console.log(`Voting results skipped for contest ${contestData._id}: no participant user IDs to notify.`);
+        return;
+      }
+
       // Get all users who participated in this contest
       const participants = await User.find({
-        _id: { $in: contestData.participantIds }
+        _id: { $in: participantObjectIds }
       });
+
+      if (participants.length === 0) {
+        console.log(`Voting results skipped for contest ${contestData._id}: participants not found for IDs ${participantObjectIds.map(id => id.toString()).join(', ')}`);
+        return;
+      }
 
       const templateData = {
         contestTitle: contestData.title,
@@ -629,22 +655,42 @@ class EmailAutomationService {
         return;
       }
 
-      // Get all active subscribers for this tier
-      // First get current active subscriptions for this tier and month/year
-      const activeSubscriptions = await Subscription.find({
-        tier: tier,
-        month: currentMonth,
-        year: currentYear,
-        remaining_submissions: { $gt: 0 } // Only include active subscriptions
+      // Determine active subscriptions for the tier using the consolidated subscription schema
+      const monthStart = new Date(Date.UTC(currentYear, currentMonth - 1, 1));
+      const nextMonthStart = new Date(Date.UTC(currentYear, currentMonth, 1));
+
+      let activeSubscriptions = await Subscription.find({
+        tier,
+        lastResetAt: { $gte: monthStart, $lt: nextMonthStart }
       });
+
+      // Fallback: if no subscribers have interacted this month yet, include anyone currently on the tier
+      if (activeSubscriptions.length === 0) {
+        activeSubscriptions = await Subscription.find({ tier });
+      }
 
       if (activeSubscriptions.length === 0) {
         console.log(`No active subscriptions found for ${tier} tier in ${currentMonth}/${currentYear}`);
         return;
       }
 
+      const uniqueUserIds = [...new Set(activeSubscriptions.map(sub => sub.userId).filter(Boolean))]
+        .map((id) => {
+          try {
+            return new mongoose.Types.ObjectId(id);
+          } catch (err) {
+            return null;
+          }
+        })
+        .filter(Boolean);
+
+      if (uniqueUserIds.length === 0) {
+        console.log(`No valid subscriber user IDs found for ${tier} tier monthly drawing`);
+        return;
+      }
+
       // Get user details for participants
-      const userIds = activeSubscriptions.map(sub => sub.userId);
+      const userIds = uniqueUserIds;
       const participants = await User.find({
         _id: { $in: userIds },
         email: { $exists: true, $ne: '' },

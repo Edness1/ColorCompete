@@ -144,7 +144,23 @@ export const MainHeader = () => {
                 </div>
 
                 {/* Mobile Spacer for actions (right side) */}
-                <div className="md:hidden" />
+                <div className="md:hidden flex items-center justify-end">
+                    {isLoading ? (
+                        <div className="h-9 w-16 bg-muted animate-pulse rounded-md" />
+                    ) : !user ? (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                setAuthModalTab("signin");
+                                setAuthModalOpen(true);
+                                setMobileOpen(false);
+                            }}
+                        >
+                            Sign In
+                        </Button>
+                    ) : null}
+                </div>
             </div>
 
                     {/* Mobile Menu Panel (overlay) */}

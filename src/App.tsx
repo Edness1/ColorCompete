@@ -20,6 +20,7 @@ import Contact from "./components/Contact";
 import Terms from "./components/Terms";
 import Privacy from "./components/Privacy";
 import ForgotPassword from "./components/auth/ForgotPassword";
+import ResetPassword from "./components/auth/ResetPassword";
 import BillingHistory from "./components/BillingHistory";
 
 // Lazy load admin components
@@ -55,6 +56,7 @@ function App() {
               <Route path="/payment-success" element={<PaymentSuccess />} />
               <Route path="/payment-cancel" element={<PaymentCancel />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password/:token" element={<ResetPassword />} />
               <Route path="/billing-history" element={<BillingHistory />} />
 
               {/* Admin routes */}
