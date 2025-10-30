@@ -22,6 +22,9 @@ const UserSchema = new mongoose.Schema({
   badges: [{ type: mongoose.Schema.Types.ObjectId, ref: 'UserBadge' }], // Array of user badges
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
+  emailVerified: { type: Boolean, default: false },
+  emailVerificationToken: { type: String },
+  emailVerificationExpires: { type: Date },
   isAdmin: { type: Boolean, default: false }
 });
 

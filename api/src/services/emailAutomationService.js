@@ -70,9 +70,11 @@ class EmailAutomationService {
         }
         break;
       case 'voting_results':
+      case 'daily_winner':
+      case 'monthly_winner':
         // Run daily at specified time
         if (!automation.schedule.time) {
-          console.error(`Missing schedule time for voting_results automation: ${automation.name}`);
+          console.error(`Missing schedule time for ${automation.triggerType} automation: ${automation.name}`);
           return;
         }
         try {
@@ -155,6 +157,12 @@ class EmailAutomationService {
           break;
         case 'weekly_summary':
           await this.sendWeeklySummaryEmail(automation);
+          break;
+        case 'daily_winner':
+          await this.sendDailyWinnerEmail(automation);
+          break;
+        case 'monthly_winner':
+          await this.sendMonthlyWinnerEmail(automation);
           break;
         case 'monthly_drawing_lite':
           await this.runMonthlyDrawing(automation, 'lite');
@@ -375,7 +383,7 @@ class EmailAutomationService {
         contestPrize: contestData.prize || '$25 Gift Card',
         contestDeadline: contestData.deadline,
         votingPeriod: contestData.votingPeriod,
-        contestUrl: `${process.env.FRONTEND_URL}/contests/${contestData._id}`,
+        contestUrl: `${process.env.FRONTEND_URL}`,
         unsubscribeUrl: `${process.env.FRONTEND_URL}/unsubscribe`,
         websiteUrl: process.env.FRONTEND_URL
       };
@@ -462,7 +470,7 @@ class EmailAutomationService {
         totalSubmissions: contestData.totalSubmissions,
         totalVotes: contestData.totalVotes,
         totalParticipants: participants.length,
-        contestUrl: `${process.env.FRONTEND_URL}/contests/${contestData._id}/results`,
+        contestUrl: `${process.env.FRONTEND_URL}`,
         unsubscribeUrl: `${process.env.FRONTEND_URL}/unsubscribe`,
         websiteUrl: process.env.FRONTEND_URL
       };
@@ -882,6 +890,61 @@ class EmailAutomationService {
       console.log(`Sent monthly drawing participant emails to ${nonWinners.length} non-winners`);
     } catch (error) {
       console.error('Error sending monthly drawing participant emails:', error);
+    }
+  }
+
+  // Send daily winner email (called by cron scheduler)
+  async sendDailyWinnerEmail(automation) {
+    try {
+      console.log('Daily winner automation triggered - checking for recent contest winners');
+      
+      // Find contests completed in the last 24 hours with winners
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentWinners = await Challenge.find({
+        status: 'completed',
+        winner: { $exists: true, $ne: null },
+        updatedAt: { $gte: yesterday }
+      }).populate('winner');
+
+      for (const contest of recentWinners) {
+        // Send winner reward
+        const winnerSubmission = await Submission.findOne({
+          challenge_id: contest._id,
+          user_id: contest.winner._id
+        });
+
+        if (winnerSubmission) {
+          await this.sendWinnerReward(
+            contest.winner._id,
+            contest.title,
+            winnerSubmission.imageUrl || winnerSubmission.file_path
+          );
+          console.log(`Daily winner reward sent for contest: ${contest.title}, winner: ${contest.winner.username}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error in daily winner email automation:', error);
+    }
+  }
+
+  // Send monthly winner email (called by cron scheduler)  
+  async sendMonthlyWinnerEmail(automation) {
+    try {
+      console.log('Monthly winner automation triggered - checking for monthly winners');
+      
+      // This could check for monthly contest winners or trigger monthly drawings
+      // For now, let's trigger all monthly drawings
+      const monthlyDrawingAutomations = await EmailAutomation.find({
+        triggerType: { $in: ['monthly_drawing_lite', 'monthly_drawing_pro', 'monthly_drawing_champ'] },
+        isActive: true
+      });
+
+      for (const drawingAutomation of monthlyDrawingAutomations) {
+        const tier = drawingAutomation.triggerType.replace('monthly_drawing_', '');
+        await this.runMonthlyDrawing(drawingAutomation, tier);
+      }
+    } catch (error) {
+      console.error('Error in monthly winner email automation:', error);
     }
   }
 

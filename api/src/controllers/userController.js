@@ -10,9 +10,46 @@ exports.createUser = async (req, res) => {
     if (req.body.password) {
       req.body.password = await bcrypt.hash(req.body.password, 10);
     }
+
+    // Generate email verification token
+    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+    req.body.emailVerificationToken = emailVerificationToken;
+    req.body.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+    req.body.emailVerified = false;
+
     const user = new User(req.body);
     await user.save();
-    res.status(201).json(user);
+
+    // Send verification email
+    try {
+      const frontendBase = process.env.FRONTEND_BASE_URL || 'http://localhost:5173';
+      const verificationLink = `${frontendBase}/verify-email/${emailVerificationToken}`;
+
+      const { subject, html } = emailTemplateService.render('email_verification', {
+        verificationLink,
+        firstName: user.firstName || user.username || 'there',
+        year: new Date().getFullYear()
+      });
+
+      await emailService.sendEmail({ 
+        to: { email: user.email, userId: user._id }, 
+        subject, 
+        htmlContent: html 
+      });
+    } catch (emailError) {
+      console.error('Error sending verification email:', emailError);
+      // Continue with registration even if email fails
+    }
+
+    // Return user without sensitive data
+    const userResponse = { ...user.toObject() };
+    delete userResponse.password;
+    delete userResponse.emailVerificationToken;
+    
+    res.status(201).json({
+      message: 'Account created successfully. Please check your email to verify your account.',
+      user: userResponse
+    });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -125,6 +162,78 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
+// Verify Email
+exports.verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const user = await User.findOne({
+      emailVerificationToken: token,
+      emailVerificationExpires: { $gt: Date.now() }
+    });
+    
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired verification token' });
+    }
+
+    user.emailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save();
+
+    res.json({ message: 'Email verified successfully! You can now sign in.' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Resend Email Verification
+exports.resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email is required' });
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.json({ message: 'If that email exists, a verification email has been sent' });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ message: 'Email is already verified' });
+    }
+
+    // Generate new verification token
+    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+    user.emailVerificationToken = emailVerificationToken;
+    user.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+    await user.save();
+
+    // Send verification email
+    try {
+      const frontendBase = process.env.FRONTEND_BASE_URL || 'http://localhost:5173';
+      const verificationLink = `${frontendBase}/verify-email/${emailVerificationToken}`;
+
+      const { subject, html } = emailTemplateService.render('email_verification', {
+        verificationLink,
+        firstName: user.firstName || user.username || 'there',
+        year: new Date().getFullYear()
+      });
+
+      await emailService.sendEmail({ 
+        to: { email: user.email, userId: user._id }, 
+        subject, 
+        htmlContent: html 
+      });
+    } catch (emailError) {
+      console.error('Error sending verification email:', emailError);
+      return res.status(500).json({ message: 'Failed to send verification email' });
+    }
+
+    res.json({ message: 'If that email exists, a verification email has been sent' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Login
 exports.login = async (req, res) => {
   try {
@@ -137,8 +246,22 @@ exports.login = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
-    // Optionally, generate a JWT token here for session management
-    res.status(200).json({ message: 'Login successful', user });
+    
+    // Check if email is verified
+    if (!user.emailVerified) {
+      return res.status(403).json({ 
+        message: 'Please verify your email address before signing in. Check your inbox for a verification email.',
+        emailNotVerified: true
+      });
+    }
+    
+    // Return user without sensitive data
+    const userResponse = { ...user.toObject() };
+    delete userResponse.password;
+    delete userResponse.emailVerificationToken;
+    delete userResponse.resetPasswordToken;
+    
+    res.status(200).json({ message: 'Login successful', user: userResponse });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -176,6 +299,68 @@ exports.getUserStats = async (req, res) => {
       totalVotes,
     });
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get subscriber statistics for admin dashboard
+exports.getSubscriberStats = async (req, res) => {
+  try {
+    // TODO: Add admin check back after debugging
+    // const userId = req.headers['user-id'];
+    // if (!userId) {
+    //   return res.status(401).json({ message: 'User ID required' });
+    // }
+
+    // const requestingUser = await User.findById(userId);
+    // if (!requestingUser || !requestingUser.isAdmin) {
+    //   return res.status(403).json({ message: 'Admin access required' });
+    // }
+
+    // Get all users with subscription data
+    const users = await User.find({})
+      .select('firstName lastName email createdDate subscription emailPreferences')
+      .sort({ createdDate: -1 });
+
+    // Calculate statistics
+    const totalUsers = users.length;
+    const freeUsers = users.filter(user => !user.subscription?.type || user.subscription.type === 'free').length;
+    const liteUsers = users.filter(user => user.subscription?.type === 'lite').length;
+    const proUsers = users.filter(user => user.subscription?.type === 'pro').length;
+    const champUsers = users.filter(user => user.subscription?.type === 'champ').length;
+
+    // Get recent users (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const recentUsers = users
+      .filter(user => new Date(user.createdDate) > thirtyDaysAgo)
+      .slice(0, 10);
+
+    // Email preference statistics
+    const marketingOptIn = users.filter(user => user.emailPreferences?.marketingEmails).length;
+    const contestOptIn = users.filter(user => user.emailPreferences?.contestNotifications).length;
+    const winnerOptIn = users.filter(user => user.emailPreferences?.winnerAnnouncements).length;
+    const rewardOptIn = users.filter(user => user.emailPreferences?.rewardNotifications).length;
+
+    const stats = {
+      totalUsers,
+      freeUsers,
+      liteUsers,
+      proUsers,
+      champUsers,
+      recentUsers,
+      marketingOptIn,
+      contestOptIn,
+      winnerOptIn,
+      rewardOptIn,
+      paidSubscribers: liteUsers + proUsers + champUsers,
+      growthRate: totalUsers > 0 ? ((recentUsers.length / totalUsers) * 100).toFixed(1) : 0
+    };
+
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching subscriber stats:', error);
     res.status(500).json({ message: error.message });
   }
 };

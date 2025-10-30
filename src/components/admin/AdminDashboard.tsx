@@ -7,6 +7,7 @@ import ContestList from "./ContestList";
 import SubmissionModeration from "./SubmissionModeration";
 import ContestAnalytics from "./ContestAnalytics";
 import { EmailMarketing } from "./EmailMarketing";
+import { SubscriberManagement } from "./SubscriberManagement";
 import ContestView from "./ContestView";
 import { MainHeader } from "../header";
 
@@ -96,10 +97,11 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-8">
+        <TabsList className="grid w-full grid-cols-5 mb-8">
           <TabsTrigger value="contests">Contest Management</TabsTrigger>
           <TabsTrigger value="submissions">Submission Moderation</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="subscribers">Subscribers</TabsTrigger>
           <TabsTrigger value="email">Email Marketing</TabsTrigger>
         </TabsList>
 
@@ -140,6 +142,10 @@ export default function AdminDashboard() {
 
         <TabsContent value="analytics">
           <ContestAnalytics />
+        </TabsContent>
+
+        <TabsContent value="subscribers">
+          <SubscriberManagement />
         </TabsContent>
 
         <TabsContent value="email">

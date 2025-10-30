@@ -21,6 +21,8 @@ import Terms from "./components/Terms";
 import Privacy from "./components/Privacy";
 import ForgotPassword from "./components/auth/ForgotPassword";
 import ResetPassword from "./components/auth/ResetPassword";
+import VerifyEmail from "./components/VerifyEmail";
+import ResendVerification from "./components/ResendVerification";
 import BillingHistory from "./components/BillingHistory";
 
 // Lazy load admin components
@@ -57,6 +59,8 @@ function App() {
               <Route path="/payment-cancel" element={<PaymentCancel />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password/:token" element={<ResetPassword />} />
+              <Route path="/verify-email/:token" element={<VerifyEmail />} />
+              <Route path="/resend-verification" element={<ResendVerification />} />
               <Route path="/billing-history" element={<BillingHistory />} />
 
               {/* Admin routes */}

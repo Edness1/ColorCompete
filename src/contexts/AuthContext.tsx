@@ -80,7 +80,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Sign in failed");
+      if (!res.ok) {
+        const error = new Error(data.message || "Sign in failed");
+        // Add flag for email verification error
+        if (data.emailNotVerified) {
+          (error as any).emailNotVerified = true;
+        }
+        throw error;
+      }
       setUser(data.user);
       localStorage.setItem("user", JSON.stringify(data.user));
       return { error: null, data };

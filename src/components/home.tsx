@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Palette,
   Award,
@@ -22,6 +22,7 @@ import {
 import ActiveContest from "./ActiveContest";
 import { MainHeader } from "./header";
 import { MainFooter } from "./footer";
+import AuthModal from "./auth/AuthModal";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000"; // Adjust if needed
 
@@ -30,6 +31,8 @@ const Home = () => {
     { id: string | number; file_path: string; artistName: string; votes: number }[]
   >([]);
   const [loading, setLoading] = useState(true);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     const fetchRecentSubmissions = async () => {
@@ -54,6 +57,18 @@ const Home = () => {
     };
     fetchRecentSubmissions();
   }, []);
+
+  // Handle signin query parameter
+  useEffect(() => {
+    if (searchParams.get('signin') === 'true') {
+      setAuthModalOpen(true);
+      // Clean up the URL
+      setSearchParams(prev => {
+        prev.delete('signin');
+        return prev;
+      });
+    }
+  }, [searchParams, setSearchParams]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -328,6 +343,13 @@ const Home = () => {
 
       {/* Footer */}
       <MainFooter />
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        defaultTab="signin"
+      />
     </div>
   );
 };

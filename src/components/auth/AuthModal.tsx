@@ -27,6 +27,7 @@ export default function AuthModal({
   const [lastName, setLastName] = useState("");   // <-- Add
   const [username, setUsername] = useState("");   // <-- Add
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showEmailNotVerified, setShowEmailNotVerified] = useState(false);
 
   const { signIn, signUp, signInWithOAuth } = useAuth();
   const { toast } = useToast();
@@ -55,10 +56,67 @@ export default function AuthModal({
       }
       onClose();
     } catch (error: any) {
+      // Handle email not verified error specifically
+      if (error.emailNotVerified || error.message?.includes('verify your email')) {
+        setShowEmailNotVerified(true);
+        toast({
+          title: "Email Not Verified",
+          description: "Please check your email and click the verification link before signing in.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description:
+            error.message || "An error occurred during authentication.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email) {
       toast({
         title: "Error",
-        description:
-          error.message || "An error occurred during authentication.",
+        description: "Please enter your email address first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || "";
+      const response = await fetch(`${API_URL}/api/users/resend-verification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setShowEmailNotVerified(false);
+        toast({
+          title: "Verification Email Sent",
+          description: "Please check your email for the verification link.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Failed to send verification email",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -266,6 +324,27 @@ export default function AuthModal({
                   {isSubmitting ? "Signing in..." : "Sign In"}
                 </Button>
               </form>
+
+              {/* Email not verified message */}
+              {showEmailNotVerified && (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <div className="text-sm text-yellow-800">
+                    <p className="font-medium mb-1">Email not verified</p>
+                    <p className="mb-2">
+                      Please check your email and click the verification link before signing in.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleResendVerification}
+                      disabled={isSubmitting}
+                      className="text-yellow-800 border-yellow-300 hover:bg-yellow-100"
+                    >
+                      {isSubmitting ? "Sending..." : "Resend verification email"}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </TabsContent>
 

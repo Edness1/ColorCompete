@@ -38,8 +38,42 @@ class EmailTemplateService {
             </tr>
           </table>
         `
-      }
-      ,
+      },
+      email_verification: {
+        subject: 'Verify your ColorCompete account',
+        html: `
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7fa;padding:32px 0;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+            <tr>
+              <td>
+                <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 12px rgba(0,0,0,0.04);">
+                  <tr>
+                    <td style="padding:24px 32px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;">
+                      <h1 style="margin:0;font-size:20px;">Welcome to ColorCompete!</h1>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 12px 32px;">
+                      <p style="margin:0 0 16px 0;font-size:16px;">Hello {{firstName}},</p>
+                      <p style="margin:0 0 16px 0;line-height:1.5;color:#334155;font-size:15px;">Thank you for joining ColorCompete! To complete your registration and start participating in coloring contests, please verify your email address by clicking the button below.</p>
+                      <p style="text-align:center;margin:32px 0;">
+                        <a href="{{verificationLink}}" style="background:#10b981;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:600;display:inline-block;font-size:15px;">Verify Email</a>
+                      </p>
+                      <p style="margin:0 0 16px 0;color:#475569;font-size:14px;">If the button doesn't work, copy and paste this URL into your browser:</p>
+                      <p style="word-break:break-all;font-size:13px;background:#f1f5f9;padding:12px;border-radius:6px;color:#334155;">{{verificationLink}}</p>
+                      <p style="margin:24px 0 0 0;color:#64748b;font-size:13px;">This verification link will expire in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:24px 32px;background:#f8fafc;font-size:12px;color:#94a3b8;text-align:center;">
+                      © {{year}} ColorCompete. All rights reserved.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        `
+      },
       // Contest announcement (admin-configurable copy, safe HTML for SendPulse)
       contest_announcement: {
         subject: 'New Contest: {{contestTitle}} — Join Now',

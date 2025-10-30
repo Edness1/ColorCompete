@@ -13,10 +13,17 @@ router.delete('/:id', userController.deleteUser);
 router.post('/forgot-password', userController.forgotPassword);
 router.post('/reset-password', userController.resetPassword);
 
+// Email verification
+router.get('/verify-email/:token', userController.verifyEmail);
+router.post('/resend-verification', userController.resendVerification);
+
 // Login
 router.post('/login', userController.login);
 
 // User statistics
 router.get('/user-stats/user', userController.getUserStats);
+
+// Admin subscriber analytics
+router.get('/admin/subscriber-stats', userController.getSubscriberStats);
 
 module.exports = router;
