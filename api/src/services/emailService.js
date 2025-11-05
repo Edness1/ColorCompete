@@ -79,35 +79,39 @@ class EmailService {
       });
       const providerMessageId = response?.data?.id || response?.data?.email_id || null;
 
-      // Log the email (reuse sendGridMessageId field for provider id)
-      const emailLog = new EmailLog({
-        recipient: to.userId,
-        recipientEmail: to.email,
-        campaignId,
-        automationId,
-        subject,
-        status: 'sent',
-        sendGridMessageId: providerMessageId
-      });
-      
-      await emailLog.save();
+      // Log the email only if we have a userId (skip for contact form submissions)
+      if (to.userId) {
+        const emailLog = new EmailLog({
+          recipient: to.userId,
+          recipientEmail: to.email,
+          campaignId,
+          automationId,
+          subject,
+          status: 'sent',
+          sendGridMessageId: providerMessageId
+        });
+        
+        await emailLog.save();
+      }
 
       return { success: true, messageId: providerMessageId };
     } catch (error) {
       console.error('Error sending email:', error);
       
-      // Log the failure
-      const emailLog = new EmailLog({
-        recipient: to.userId,
-        recipientEmail: to.email,
-        campaignId,
-        automationId,
-        subject,
-        status: 'failed',
-        failureReason: error.message
-      });
-      
-      await emailLog.save();
+      // Log the failure only if we have a userId (skip for contact form submissions)
+      if (to.userId) {
+        const emailLog = new EmailLog({
+          recipient: to.userId,
+          recipientEmail: to.email,
+          campaignId,
+          automationId,
+          subject,
+          status: 'failed',
+          failureReason: error.message
+        });
+        
+        await emailLog.save();
+      }
       
       return { success: false, error: error.message };
     }

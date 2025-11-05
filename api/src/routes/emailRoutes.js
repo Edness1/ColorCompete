@@ -858,3 +858,106 @@ router.post('/automations/voting-results/execute', requireAdmin, async (req, res
     res.status(500).json({ error: error.message });
   }
 });
+
+// =============== CONTACT FORM ===============
+
+// Handle contact form submissions
+router.post('/contact', async (req, res) => {
+  try {
+    const { name, email, subject, message } = req.body;
+    
+    // Validate required fields
+    if (!name || !email || !subject || !message) {
+      return res.status(400).json({ 
+        error: 'All fields are required (name, email, subject, message)' 
+      });
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        error: 'Please provide a valid email address' 
+      });
+    }
+    
+    // Create HTML content for the email
+    const htmlContent = `
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+            .content { padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+            .field { margin-bottom: 15px; }
+            .label { font-weight: bold; color: #555; }
+            .value { margin-top: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h2>New Contact Form Submission</h2>
+              <p>You have received a new message through the ColorCompete contact form.</p>
+            </div>
+            <div class="content">
+              <div class="field">
+                <div class="label">Name:</div>
+                <div class="value">${name}</div>
+              </div>
+              <div class="field">
+                <div class="label">Email:</div>
+                <div class="value">${email}</div>
+              </div>
+              <div class="field">
+                <div class="label">Subject:</div>
+                <div class="value">${subject}</div>
+              </div>
+              <div class="field">
+                <div class="label">Message:</div>
+                <div class="value">${message.replace(/\n/g, '<br>')}</div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    // Create plain text version
+    const textContent = `
+New Contact Form Submission
+
+Name: ${name}
+Email: ${email}
+Subject: ${subject}
+Message: ${message}
+    `.trim();
+    
+    // Send email to colorcompete@gmail.com
+    await emailService.sendEmail({
+      to: { 
+        email: 'colorcompete@gmail.com',
+        userId: null // No user ID for contact form submissions
+      },
+      subject: `Contact Form: ${subject}`,
+      htmlContent,
+      textContent
+    });
+    
+    // Log the contact form submission
+    console.log(`Contact form submission from ${name} (${email}): ${subject}`);
+    
+    res.json({ 
+      message: 'Your message has been sent successfully. We will get back to you within 24 hours.' 
+    });
+    
+  } catch (error) {
+    console.error('Error processing contact form:', error);
+    res.status(500).json({ 
+      error: 'Failed to send message. Please try again later.' 
+    });
+  }
+});
+
+module.exports = router;

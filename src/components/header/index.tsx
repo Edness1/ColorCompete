@@ -81,6 +81,13 @@ export const MainHeader = () => {
                         >
                             Pricing
                         </Link>
+                    <Link
+                        to="/contact"
+                        className="font-medium text-muted-foreground hover:text-primary transition-colors"
+                        onClick={() => setMobileOpen(false)}
+                    >
+                        Contact
+                    </Link>
                     {user?.isAdmin && (
                         <Link
                             to="/admin"
@@ -204,6 +211,13 @@ export const MainHeader = () => {
                             onClick={() => setMobileOpen(false)}
                         >
                             Pricing
+                        </Link>
+                        <Link
+                            to="/contact"
+                            className="px-2 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            onClick={() => setMobileOpen(false)}
+                        >
+                            Contact
                         </Link>
                         {user?.isAdmin && (
                             <Link
