@@ -34,7 +34,7 @@ const Contact = () => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/email/contact', {
+      const response = await fetch('https://api.colorcompete.com/api/email/contact', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
