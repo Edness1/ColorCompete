@@ -539,27 +539,57 @@ router.get('/analytics', requireAdmin, async (req, res) => {
   }
 });
 
-// Debug endpoint to check email logs
+// Debug endpoint to check email logs and ID matching
 router.get('/analytics/debug', requireAdmin, async (req, res) => {
   try {
     const totalLogs = await EmailLog.countDocuments();
     const recentLogs = await EmailLog.find()
       .sort({ sentAt: -1 })
       .limit(10)
-      .select('recipientEmail subject status sentAt deliveredAt openedAt clickedAt')
+      .select('recipientEmail subject status sentAt deliveredAt openedAt clickedAt sendGridMessageId')
       .lean();
     
     const statusBreakdown = await EmailLog.aggregate([
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
     
+    // Get sample of message IDs from database
+    const sampleIds = await EmailLog.find({ sendGridMessageId: { $exists: true, $ne: null } })
+      .limit(5)
+      .select('sendGridMessageId recipientEmail')
+      .lean();
+    
+    // Try to fetch SendPulse data to compare
+    let sendPulsePreview = null;
+    try {
+      const spData = await emailService.fetchEmailStatistics();
+      if (spData) {
+        const emails = Array.isArray(spData) ? spData : spData.data || spData.emails || [];
+        sendPulsePreview = {
+          count: Array.isArray(emails) ? emails.length : 0,
+          structure: emails.length > 0 ? Object.keys(emails[0]) : [],
+          sampleIds: emails.slice(0, 3).map(e => ({
+            id: e.id || e.smtp_id || e.email_id || e.message_id,
+            email: e.email || e.recipient || e.to,
+            status: e.status || e.email_status
+          }))
+        };
+      }
+    } catch (e) {
+      sendPulsePreview = { error: e.message };
+    }
+    
     res.json({
-      totalLogs,
-      statusBreakdown,
-      recentLogs,
+      database: {
+        totalLogs,
+        statusBreakdown,
+        recentLogs,
+        sampleMessageIds: sampleIds
+      },
+      sendPulse: sendPulsePreview,
       note: totalLogs === 0 
         ? 'No email logs found. Send a campaign first.'
-        : 'Email logs exist. Use /api/email/analytics/sync to fetch stats from SendPulse.'
+        : 'Compare message IDs between database and SendPulse to diagnose matching issues.'
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
