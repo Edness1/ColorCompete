@@ -596,19 +596,26 @@ router.post('/analytics/sync', requireAdmin, async (req, res) => {
 // Workaround: Mark all 'sent' emails as 'delivered' (use when SendPulse API matching fails)
 router.post('/analytics/mark-delivered', requireAdmin, async (req, res) => {
   try {
-    const result = await EmailLog.updateMany(
-      { status: 'sent' },
-      { 
-        $set: { 
-          status: 'delivered',
-          deliveredAt: '$sentAt' // Use sentAt as deliveredAt
-        } 
-      }
-    );
+    // Fetch emails with 'sent' status and update them individually
+    const sentEmails = await EmailLog.find({ status: 'sent' });
+    
+    let modifiedCount = 0;
+    for (const email of sentEmails) {
+      await EmailLog.updateOne(
+        { _id: email._id },
+        { 
+          $set: { 
+            status: 'delivered',
+            deliveredAt: email.sentAt || new Date()
+          } 
+        }
+      );
+      modifiedCount++;
+    }
     
     res.json({
       message: 'Marked sent emails as delivered',
-      modified: result.modifiedCount
+      modified: modifiedCount
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
