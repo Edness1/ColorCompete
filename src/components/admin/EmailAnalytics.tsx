@@ -9,12 +9,8 @@ import { useAuth } from '@/contexts/AuthContext';
 interface AnalyticsData {
   totalSent: number;
   totalDelivered: number;
-  totalOpened: number;
-  totalClicked: number;
   totalBounced: number;
   deliveryRate: string;
-  openRate: string;
-  clickRate: string;
   bounceRate: string;
 }
 
@@ -133,7 +129,7 @@ export function EmailAnalytics() {
       {/* Overall Statistics */}
       {analytics && (
         <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Sent</CardTitle>
@@ -142,51 +138,29 @@ export function EmailAnalytics() {
               <CardContent>
                 <div className="text-2xl font-bold">{analytics.totalSent.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">
-                  {analytics.totalDelivered.toLocaleString()} delivered ({analytics.deliveryRate}%)
+                  Last {timeframe} days
                 </p>
               </CardContent>
             </Card>
             
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Open Rate</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Delivery Rate</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${getPerformanceColor(parseFloat(analytics.openRate))}`}>
-                  {analytics.openRate}%
+                <div className="text-2xl font-bold text-green-600">
+                  {analytics.deliveryRate}%
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {analytics.totalOpened.toLocaleString()} opens
+                  {analytics.totalDelivered.toLocaleString()} delivered
                 </p>
                 <Badge 
-                  variant={getPerformanceBadge(parseFloat(analytics.openRate), 'open')}
+                  variant={parseFloat(analytics.deliveryRate) >= 95 ? 'default' : 'secondary'}
                   className="text-xs mt-1"
                 >
-                  {parseFloat(analytics.openRate) >= 20 ? 'Excellent' : 
-                   parseFloat(analytics.openRate) >= 15 ? 'Good' : 'Needs Improvement'}
-                </Badge>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Click Rate</CardTitle>
-                <MousePointer className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${getPerformanceColor(parseFloat(analytics.clickRate))}`}>
-                  {analytics.clickRate}%
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {analytics.totalClicked.toLocaleString()} clicks
-                </p>
-                <Badge 
-                  variant={getPerformanceBadge(parseFloat(analytics.clickRate), 'click')}
-                  className="text-xs mt-1"
-                >
-                  {parseFloat(analytics.clickRate) >= 3 ? 'Excellent' : 
-                   parseFloat(analytics.clickRate) >= 2 ? 'Good' : 'Needs Improvement'}
+                  {parseFloat(analytics.deliveryRate) >= 95 ? 'Excellent' : 
+                   parseFloat(analytics.deliveryRate) >= 90 ? 'Good' : 'Needs Improvement'}
                 </Badge>
               </CardContent>
             </Card>
@@ -229,22 +203,12 @@ export function EmailAnalytics() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {parseFloat(analytics.openRate) < 15 && (
+              {parseFloat(analytics.deliveryRate) < 90 && (
                 <div className="p-4 border border-yellow-200 bg-yellow-50 rounded-lg">
-                  <h4 className="font-medium text-yellow-800">Improve Open Rates</h4>
+                  <h4 className="font-medium text-yellow-800">Improve Delivery Rate</h4>
                   <p className="text-sm text-yellow-700 mt-1">
-                    Your open rate is below average. Try more compelling subject lines, 
-                    send at optimal times, and segment your audience better.
-                  </p>
-                </div>
-              )}
-              
-              {parseFloat(analytics.clickRate) < 2 && (
-                <div className="p-4 border border-blue-200 bg-blue-50 rounded-lg">
-                  <h4 className="font-medium text-blue-800">Increase Engagement</h4>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Add clear call-to-action buttons, personalize content, 
-                    and make sure your emails are mobile-friendly.
+                    Your delivery rate is below optimal. Verify email addresses before sending
+                    and maintain a clean mailing list.
                   </p>
                 </div>
               )}
@@ -259,12 +223,12 @@ export function EmailAnalytics() {
                 </div>
               )}
               
-              {parseFloat(analytics.openRate) >= 20 && parseFloat(analytics.clickRate) >= 3 && (
+              {parseFloat(analytics.deliveryRate) >= 95 && parseFloat(analytics.bounceRate) <= 2 && (
                 <div className="p-4 border border-green-200 bg-green-50 rounded-lg">
-                  <h4 className="font-medium text-green-800">Great Performance!</h4>
+                  <h4 className="font-medium text-green-800">Great Deliverability!</h4>
                   <p className="text-sm text-green-700 mt-1">
-                    Your emails are performing well. Keep up the good work with 
-                    relevant content and consistent sending schedule.
+                    Your emails are reaching recipients successfully. Keep maintaining 
+                    good sender reputation and list hygiene.
                   </p>
                 </div>
               )}
@@ -292,13 +256,6 @@ export function EmailAnalytics() {
           ) : (
             <div className="space-y-4">
               {campaigns.map((campaign) => {
-                const openRate = campaign.sentCount > 0 
-                  ? ((campaign.openedCount / campaign.sentCount) * 100).toFixed(1)
-                  : '0';
-                const clickRate = campaign.openedCount > 0 
-                  ? ((campaign.clickedCount / campaign.openedCount) * 100).toFixed(1)
-                  : '0';
-                
                 return (
                   <div key={campaign._id} className="border rounded-lg p-4 space-y-3">
                     <div className="flex items-center justify-between">
@@ -313,34 +270,27 @@ export function EmailAnalytics() {
                       </Badge>
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">Delivered:</span>
                         <br />
-                        <span className="font-medium">
+                        <span className="font-medium text-green-600">
                           {campaign.deliveredCount.toLocaleString()} 
                           ({campaign.sentCount > 0 ? ((campaign.deliveredCount / campaign.sentCount) * 100).toFixed(1) : 0}%)
                         </span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Opened:</span>
-                        <br />
-                        <span className={`font-medium ${getPerformanceColor(parseFloat(openRate))}`}>
-                          {campaign.openedCount.toLocaleString()} ({openRate}%)
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Clicked:</span>
-                        <br />
-                        <span className={`font-medium ${getPerformanceColor(parseFloat(clickRate))}`}>
-                          {campaign.clickedCount.toLocaleString()} ({clickRate}%)
-                        </span>
-                      </div>
-                      <div>
                         <span className="text-muted-foreground">Bounced:</span>
                         <br />
-                        <span className="font-medium">
+                        <span className="font-medium text-red-600">
                           {campaign.bouncedCount?.toLocaleString() || 0}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Total Recipients:</span>
+                        <br />
+                        <span className="font-medium">
+                          {campaign.sentCount.toLocaleString()}
                         </span>
                       </div>
                     </div>
