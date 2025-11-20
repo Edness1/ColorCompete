@@ -211,7 +211,18 @@ class EmailService {
       const response = await axios.post(SENDPULSE_SEND_URL, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      const providerMessageId = response?.data?.id || response?.data?.email_id || null;
+      
+      // SendPulse may return different ID fields
+      const providerMessageId = response?.data?.id || 
+                                response?.data?.email_id || 
+                                response?.data?.smtp_id ||
+                                response?.data?.message_id ||
+                                null;
+      
+      // Log the actual response structure for debugging
+      if (!providerMessageId) {
+        console.log('SendPulse response without message ID:', JSON.stringify(response?.data));
+      }
 
       // Log the email only if we have a userId (skip for contact form submissions)
       if (to.userId) {
@@ -226,6 +237,7 @@ class EmailService {
         });
         
         await emailLog.save();
+        console.log(`Email logged with ID: ${providerMessageId || 'NONE'} to ${to.email}`);
       }
 
       return { success: true, messageId: providerMessageId };
