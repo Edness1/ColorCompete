@@ -501,7 +501,9 @@ const UserProfile = ({
                   <div className="text-sm text-muted-foreground">
                     Submissions Left
                   </div>
-                  <div className="font-medium">{remainingSubmissions}</div>
+                  <div className="font-medium">
+                    {tier === "champ" ? "Unlimited" : remainingSubmissions}
+                  </div>
                 </div>
                 <div className="p-2 border rounded-md text-center">
                   <div className="text-sm text-muted-foreground">Renewal</div>
@@ -1141,7 +1143,7 @@ const UserProfile = ({
                       Submissions Left
                     </div>
                     <div className="text-xl font-semibold">
-                      {remainingSubmissions}
+                      {tier === "champ" ? "Unlimited" : remainingSubmissions}
                     </div>
                   </div>
                   <div className="text-center p-3 border rounded-md">

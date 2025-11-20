@@ -488,6 +488,10 @@ router.get('/analytics', requireAdmin, async (req, res) => {
     const daysAgo = new Date();
     daysAgo.setDate(daysAgo.getDate() - parseInt(timeframe));
     
+    // First check if there are ANY email logs at all
+    const totalLogsEver = await EmailLog.countDocuments();
+    console.log(`Total email logs in database: ${totalLogsEver}`);
+    
     const totalSent = await EmailLog.countDocuments({
       sentAt: { $gte: daysAgo }
     });
@@ -512,16 +516,63 @@ router.get('/analytics', requireAdmin, async (req, res) => {
       status: 'bounced'
     });
     
+    // Calculate rates with proper string formatting
+    const deliveryRate = totalSent > 0 ? ((totalDelivered / totalSent) * 100).toFixed(2) : '0.00';
+    const openRate = totalDelivered > 0 ? ((totalOpened / totalDelivered) * 100).toFixed(2) : '0.00';
+    const clickRate = totalOpened > 0 ? ((totalClicked / totalOpened) * 100).toFixed(2) : '0.00';
+    const bounceRate = totalSent > 0 ? ((totalBounced / totalSent) * 100).toFixed(2) : '0.00';
+    
     res.json({
       totalSent,
       totalDelivered,
       totalOpened,
       totalClicked,
       totalBounced,
-      deliveryRate: totalSent > 0 ? (totalDelivered / totalSent * 100).toFixed(2) : 0,
-      openRate: totalDelivered > 0 ? (totalOpened / totalDelivered * 100).toFixed(2) : 0,
-      clickRate: totalOpened > 0 ? (totalClicked / totalOpened * 100).toFixed(2) : 0,
-      bounceRate: totalSent > 0 ? (totalBounced / totalSent * 100).toFixed(2) : 0
+      deliveryRate,
+      openRate,
+      clickRate,
+      bounceRate
+    });
+  } catch (error) {
+    console.error('Analytics error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Debug endpoint to check email logs
+router.get('/analytics/debug', requireAdmin, async (req, res) => {
+  try {
+    const totalLogs = await EmailLog.countDocuments();
+    const recentLogs = await EmailLog.find()
+      .sort({ sentAt: -1 })
+      .limit(10)
+      .select('recipientEmail subject status sentAt deliveredAt openedAt clickedAt')
+      .lean();
+    
+    const statusBreakdown = await EmailLog.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    
+    res.json({
+      totalLogs,
+      statusBreakdown,
+      recentLogs,
+      note: totalLogs === 0 
+        ? 'No email logs found. Send a campaign first.'
+        : 'Email logs exist. Use /api/email/analytics/sync to fetch stats from SendPulse.'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Sync statistics from SendPulse API
+router.post('/analytics/sync', requireAdmin, async (req, res) => {
+  try {
+    const result = await emailService.syncStatisticsFromSendPulse();
+    res.json({
+      message: 'Statistics synced successfully',
+      ...result
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -957,6 +1008,35 @@ Message: ${message}
     res.status(500).json({ 
       error: 'Failed to send message. Please try again later.' 
     });
+  }
+});
+
+// =============== CRON JOBS / AUTOMATED TASKS ===============
+
+// Automated statistics sync endpoint (call this from a cron job)
+// No authentication required - use a secret token instead for security
+router.post('/cron/sync-stats', async (req, res) => {
+  try {
+    // Verify cron secret to prevent unauthorized access
+    const cronSecret = req.headers['x-cron-secret'] || req.query.secret;
+    const expectedSecret = process.env.CRON_SECRET || 'change-me-in-production';
+    
+    if (cronSecret !== expectedSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    console.log('Starting automated statistics sync...');
+    const result = await emailService.syncStatisticsFromSendPulse();
+    console.log('Statistics sync completed:', result);
+    
+    res.json({
+      message: 'Automated statistics sync completed',
+      timestamp: new Date().toISOString(),
+      ...result
+    });
+  } catch (error) {
+    console.error('Cron sync error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

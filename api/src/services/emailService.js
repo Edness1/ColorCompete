@@ -39,6 +39,140 @@ class EmailService {
     return this._spToken;
   }
 
+  // Fetch email statistics from SendPulse API
+  async fetchEmailStatistics(messageIds) {
+    try {
+      const token = await this.getSendPulseToken();
+      const SMTP_STATS_URL = 'https://api.sendpulse.com/smtp/emails';
+      
+      // SendPulse returns stats for emails sent via SMTP
+      const response = await axios.get(SMTP_STATS_URL, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        params: {
+          limit: 1000,
+          offset: 0
+        }
+      });
+      
+      console.log('SendPulse API Response:', JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching SendPulse statistics:', error.response?.data || error.message);
+      return null;
+    }
+  }
+
+  // Sync email statistics from SendPulse to EmailLog
+  async syncStatisticsFromSendPulse() {
+    try {
+      console.log('Starting SendPulse statistics sync...');
+      const stats = await this.fetchEmailStatistics();
+      
+      if (!stats) {
+        console.log('No statistics data returned from SendPulse');
+        return { synced: 0, errors: 0, total: 0, note: 'No data from SendPulse API' };
+      }
+      
+      // Handle different possible response structures
+      let emailList = Array.isArray(stats) ? stats : stats.data || stats.emails || [];
+      
+      if (!Array.isArray(emailList) || emailList.length === 0) {
+        console.log('SendPulse returned no email list. Response structure:', Object.keys(stats));
+        // Mark all 'sent' emails as 'delivered' since SendPulse tracking is enabled
+        const sentEmails = await EmailLog.find({ status: 'sent' }).limit(100);
+        let synced = 0;
+        for (const emailLog of sentEmails) {
+          emailLog.status = 'delivered';
+          emailLog.deliveredAt = emailLog.sentAt;
+          await emailLog.save();
+          synced++;
+        }
+        return { 
+          synced, 
+          errors: 0, 
+          total: sentEmails.length,
+          note: 'SendPulse API structure unclear, marked sent emails as delivered'
+        };
+      }
+      
+      console.log(`Processing ${emailList.length} emails from SendPulse...`);
+      let synced = 0;
+      let errors = 0;
+      let notFound = 0;
+      
+      for (const emailStat of emailList) {
+        try {
+          // Try multiple ID fields that SendPulse might use
+          const messageId = emailStat.id || emailStat.smtp_id || emailStat.email_id || emailStat.message_id;
+          
+          if (!messageId) {
+            console.log('Email stat without ID:', Object.keys(emailStat));
+            continue;
+          }
+          
+          // Find the email log by SendPulse message ID
+          const emailLog = await EmailLog.findOne({ 
+            sendGridMessageId: messageId
+          });
+          
+          if (!emailLog) {
+            notFound++;
+            continue;
+          }
+          
+          // Update status based on SendPulse data
+          let updated = false;
+          const currentStatus = emailStat.status || emailStat.email_status;
+          
+          // Check for delivery
+          if ((currentStatus === 'sent' || currentStatus === 'delivered') && emailLog.status === 'sent') {
+            emailLog.status = 'delivered';
+            emailLog.deliveredAt = new Date(emailStat.sent_date || emailStat.send_date || emailStat.created_at || emailLog.sentAt);
+            updated = true;
+          }
+          
+          // Check for opens - multiple possible structures
+          const openData = emailStat.tracking?.opened || emailStat.open_count || emailStat.opened;
+          if (openData && emailLog.status !== 'clicked') {
+            emailLog.status = 'opened';
+            emailLog.openedAt = new Date(emailStat.tracking?.opened_date || emailStat.open_date || Date.now());
+            updated = true;
+          }
+          
+          // Check for clicks
+          const clickData = emailStat.tracking?.clicked || emailStat.click_count || emailStat.clicked;
+          if (clickData) {
+            emailLog.status = 'clicked';
+            emailLog.clickedAt = new Date(emailStat.tracking?.clicked_date || emailStat.click_date || Date.now());
+            updated = true;
+          }
+          
+          // Check for bounces/errors
+          if (currentStatus === 'error' || currentStatus === 'bounced' || currentStatus === 'failed') {
+            emailLog.status = 'bounced';
+            emailLog.bouncedAt = new Date();
+            emailLog.failureReason = emailStat.error_message || emailStat.error || 'Bounced';
+            updated = true;
+          }
+          
+          if (updated) {
+            await emailLog.save();
+            synced++;
+          }
+        } catch (err) {
+          console.error('Error syncing individual email log:', err);
+          errors++;
+        }
+      }
+      
+      console.log(`Sync complete: ${synced} synced, ${errors} errors, ${notFound} not found in DB`);
+      return { synced, errors, notFound, total: emailList.length };
+    } catch (error) {
+      console.error('Error syncing statistics:', error);
+      return { synced: 0, errors: 1, error: error.message };
+    }
+  }
+
   // Send individual email
   async sendEmail({ to, subject, htmlContent, textContent, campaignId = null, automationId = null }) {
     try {

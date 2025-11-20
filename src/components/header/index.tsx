@@ -74,19 +74,12 @@ export const MainHeader = () => {
                     >
                         Rewards
                     </Link>
-                        <Link
-                            to="/pricing"
-                            className="font-medium text-muted-foreground hover:text-primary transition-colors"
-                            onClick={() => setMobileOpen(false)}
-                        >
-                            Pricing
-                        </Link>
                     <Link
-                        to="/contact"
+                        to="/pricing"
                         className="font-medium text-muted-foreground hover:text-primary transition-colors"
                         onClick={() => setMobileOpen(false)}
                     >
-                        Contact
+                        Pricing
                     </Link>
                     {user?.isAdmin && (
                         <Link

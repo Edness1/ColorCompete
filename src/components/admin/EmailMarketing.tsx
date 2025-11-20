@@ -26,6 +26,7 @@ export function EmailMarketing() {
   const { user } = useAuth();
   const [stats, setStats] = useState<EmailStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     fetchEmailStats();
@@ -68,6 +69,27 @@ export function EmailMarketing() {
     }
   };
 
+  const handleSyncStats = async () => {
+    setSyncing(true);
+    try {
+      const response = await fetch(API_URL+'/api/email/analytics/sync', {
+        method: 'POST',
+        headers: {
+          'user-id': user?._id || ''
+        }
+      });
+      
+      if (response.ok) {
+        // Refresh stats after sync
+        await fetchEmailStats();
+      }
+    } catch (error) {
+      console.error('Error syncing stats:', error);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -77,6 +99,15 @@ export function EmailMarketing() {
             Manage email campaigns and automations for ColorCompete
           </p>
         </div>
+        <Button 
+          onClick={handleSyncStats} 
+          disabled={syncing}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
+          <TrendingUp className="h-4 w-4" />
+          {syncing ? 'Syncing...' : 'Sync Stats'}
+        </Button>
       </div>
 
       {/* Stats Overview */}

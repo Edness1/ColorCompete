@@ -404,8 +404,8 @@ const GalleryView = ({
                           size="sm"
                           className="p-1 h-auto"
                           onClick={() => handleVote(submission.id, submission.hasVoted)}
-                          disabled={isVoting || submission.hasVoted}
-                          title={submission.hasVoted ? "You already voted" : "Vote for this artwork"}
+                          disabled={isVoting || submission.hasVoted || submission.user_id === user?._id}
+                          title={submission.user_id === user?._id ? "You can't vote for your own artwork" : submission.hasVoted ? "You already voted" : "Vote for this artwork"}
                         >
                           {isVoting ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
