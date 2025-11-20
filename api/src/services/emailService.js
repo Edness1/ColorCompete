@@ -102,18 +102,36 @@ class EmailService {
       
       for (const emailStat of emailList) {
         try {
-          // Try multiple ID fields that SendPulse might use
+          // Try to match by message ID first
           const messageId = emailStat.id || emailStat.smtp_id || emailStat.email_id || emailStat.message_id;
+          const recipientEmail = emailStat.email || emailStat.recipient || emailStat.to;
+          const sentDate = new Date(emailStat.sent_date || emailStat.send_date || emailStat.created_at);
           
-          if (!messageId) {
-            console.log('Email stat without ID:', Object.keys(emailStat));
+          if (!recipientEmail) {
+            console.log('Email stat without recipient:', Object.keys(emailStat));
             continue;
           }
           
-          // Find the email log by SendPulse message ID
-          const emailLog = await EmailLog.findOne({ 
-            sendGridMessageId: messageId
-          });
+          let emailLog = null;
+          
+          // Try to find by message ID if available
+          if (messageId) {
+            emailLog = await EmailLog.findOne({ sendGridMessageId: messageId });
+          }
+          
+          // Fallback: Match by recipient email and timestamp (within 5 minute window)
+          if (!emailLog && recipientEmail && sentDate) {
+            const fiveMinutesBefore = new Date(sentDate.getTime() - 5 * 60 * 1000);
+            const fiveMinutesAfter = new Date(sentDate.getTime() + 5 * 60 * 1000);
+            
+            emailLog = await EmailLog.findOne({
+              recipientEmail: recipientEmail,
+              sentAt: { 
+                $gte: fiveMinutesBefore,
+                $lte: fiveMinutesAfter
+              }
+            }).sort({ sentAt: -1 });
+          }
           
           if (!emailLog) {
             notFound++;
