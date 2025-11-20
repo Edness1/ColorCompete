@@ -90,6 +90,30 @@ export function EmailMarketing() {
     }
   };
 
+  const handleMarkDelivered = async () => {
+    if (!confirm('This will mark all "sent" emails as "delivered". Continue?')) return;
+    setSyncing(true);
+    try {
+      const response = await fetch(API_URL+'/api/email/analytics/mark-delivered', {
+        method: 'POST',
+        headers: {
+          'user-id': user?._id || ''
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Marked ${data.modified} emails as delivered`);
+        // Refresh stats
+        await fetchEmailStats();
+      }
+    } catch (error) {
+      console.error('Error marking delivered:', error);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -99,15 +123,26 @@ export function EmailMarketing() {
             Manage email campaigns and automations for ColorCompete
           </p>
         </div>
-        <Button 
-          onClick={handleSyncStats} 
-          disabled={syncing}
-          variant="outline"
-          className="flex items-center gap-2"
-        >
-          <TrendingUp className="h-4 w-4" />
-          {syncing ? 'Syncing...' : 'Sync Stats'}
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={handleMarkDelivered} 
+            disabled={syncing}
+            variant="secondary"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            Mark Delivered
+          </Button>
+          <Button 
+            onClick={handleSyncStats} 
+            disabled={syncing}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <TrendingUp className="h-4 w-4" />
+            {syncing ? 'Syncing...' : 'Sync Stats'}
+          </Button>
+        </div>
       </div>
 
       {/* Stats Overview */}
