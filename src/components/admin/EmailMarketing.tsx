@@ -13,12 +13,8 @@ import { useAuth } from '@/contexts/AuthContext';
 interface EmailStats {
   totalSent: number;
   totalDelivered: number;
-  totalOpened: number;
-  totalClicked: number;
   totalBounced: number;
   deliveryRate: string;
-  openRate: string;
-  clickRate: string;
   bounceRate: string;
 }
 
@@ -147,7 +143,7 @@ export function EmailMarketing() {
 
       {/* Stats Overview */}
       {!loading && stats && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Sent</CardTitle>
@@ -176,26 +172,13 @@ export function EmailMarketing() {
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Open Rate</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.openRate}%</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.totalOpened.toLocaleString()} opened
-              </p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Click Rate</CardTitle>
+              <CardTitle className="text-sm font-medium">Bounce Rate</CardTitle>
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.clickRate}%</div>
+              <div className="text-2xl font-bold">{stats.bounceRate}%</div>
               <p className="text-xs text-muted-foreground">
-                {stats.totalClicked.toLocaleString()} clicked
+                {stats.totalBounced.toLocaleString()} bounced
               </p>
             </CardContent>
           </Card>

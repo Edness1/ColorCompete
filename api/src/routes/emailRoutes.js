@@ -498,39 +498,23 @@ router.get('/analytics', requireAdmin, async (req, res) => {
     
     const totalDelivered = await EmailLog.countDocuments({
       sentAt: { $gte: daysAgo },
-      status: { $in: ['delivered', 'opened', 'clicked'] }
-    });
-    
-    const totalOpened = await EmailLog.countDocuments({
-      sentAt: { $gte: daysAgo },
-      status: { $in: ['opened', 'clicked'] }
-    });
-    
-    const totalClicked = await EmailLog.countDocuments({
-      sentAt: { $gte: daysAgo },
-      status: 'clicked'
+      status: 'delivered'
     });
     
     const totalBounced = await EmailLog.countDocuments({
       sentAt: { $gte: daysAgo },
-      status: 'bounced'
+      status: { $in: ['bounced', 'failed'] }
     });
     
     // Calculate rates with proper string formatting
     const deliveryRate = totalSent > 0 ? ((totalDelivered / totalSent) * 100).toFixed(2) : '0.00';
-    const openRate = totalDelivered > 0 ? ((totalOpened / totalDelivered) * 100).toFixed(2) : '0.00';
-    const clickRate = totalOpened > 0 ? ((totalClicked / totalOpened) * 100).toFixed(2) : '0.00';
     const bounceRate = totalSent > 0 ? ((totalBounced / totalSent) * 100).toFixed(2) : '0.00';
     
     res.json({
       totalSent,
       totalDelivered,
-      totalOpened,
-      totalClicked,
       totalBounced,
       deliveryRate,
-      openRate,
-      clickRate,
       bounceRate
     });
   } catch (error) {
